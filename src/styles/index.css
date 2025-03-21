@@ -11,3 +11,32 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Reset de margens para containers */
+.container {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+/* Estilos globais adicionais */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.mt-2 {
+  margin-top: 16px;
+}
+
+.mb-2 {
+  margin-bottom: 16px;
+}
+
+.p-2 {
+  padding: 16px;
+}
