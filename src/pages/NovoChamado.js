@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { 
   Box, Typography, TextField, Button, Paper, 
-  FormControl, InputLabel, Select, MenuItem
+  FormControl, InputLabel, Select, MenuItem,
+  Alert, Snackbar
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { chamadoService } from '../api';
+import { chamadoService } from '../api/chamadoService';
 
 function NovoChamado() {
   const navigate = useNavigate();
@@ -12,9 +13,13 @@ function NovoChamado() {
     setor: 'SAC',
     tipoSolicitacao: 'CLIENTE SEM ACESSO A SVA',
     responsavel: 'HELPER 1',
+    categoria: 'SUPORTE', // Adicionando categoria
+    tipo: 'NORMAL', // Adicionando tipo
     descricao: ''
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [openSnackbar, setOpenSnackbar] = useState(false);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -27,20 +32,34 @@ function NovoChamado() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     
     try {
       await chamadoService.createChamado({
         titulo: formData.tipoSolicitacao,
         descricao: formData.descricao,
         setor: formData.setor,
-        responsavel: formData.responsavel
+        responsavel: formData.responsavel,
+        categoria: formData.categoria, // Incluindo categoria na requisição
+        tipo: formData.tipo // Incluindo tipo na requisição
       });
-      navigate('/chamados');
+      setOpenSnackbar(true);
+      setTimeout(() => {
+        navigate('/chamados');
+      }, 1500);
     } catch (error) {
       console.error('Erro ao criar chamado:', error);
+      setError('Erro ao criar chamado. Verifique sua conexão e tente novamente.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setOpenSnackbar(false);
   };
 
   // Componente Select personalizado para combinar com o design
@@ -91,6 +110,12 @@ function NovoChamado() {
           Novo Chamado
         </Typography>
         
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+        
         <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
           <CustomSelect 
             name="setor"
@@ -116,6 +141,22 @@ function NovoChamado() {
             onChange={handleChange}
           />
           
+          <CustomSelect 
+            name="categoria"
+            label="Categoria"
+            value={formData.categoria}
+            options={['SUPORTE', 'FINANCEIRO', 'TÉCNICO']}
+            onChange={handleChange}
+          />
+          
+          <CustomSelect 
+            name="tipo"
+            label="Tipo"
+            value={formData.tipo}
+            options={['NORMAL', 'URGENTE', 'PRIORITÁRIO']}
+            onChange={handleChange}
+          />
+          
           <Box 
             sx={{ 
               p: 3, 
@@ -125,7 +166,6 @@ function NovoChamado() {
               mb: 3
             }}
           >
-            {/* Área para descrição do chamado */}
             <TextField
               fullWidth
               multiline
@@ -161,6 +201,16 @@ function NovoChamado() {
           </Box>
         </Box>
       </Paper>
+      
+      <Snackbar
+        open={openSnackbar}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+      >
+        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
+          Chamado criado com sucesso!
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

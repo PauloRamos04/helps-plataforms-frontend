@@ -1,6 +1,29 @@
-import api from './api';
+// src/api/chamadoService.js
+import axios from 'axios'; // Importando diretamente o axios em vez de um arquivo api
 
-const chamadoService = {
+// Configuração básica do axios (se necessário)
+const api = axios.create({
+  baseURL: 'http://localhost:8080', // Ajuste para a URL do seu backend
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Interceptor para adicionar token de autenticação (se estiver usando)
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+export const chamadoService = {
   // Obter todos os chamados
   getChamados: async () => {
     try {
@@ -89,5 +112,3 @@ const chamadoService = {
     }
   }
 };
-
-export default chamadoService;

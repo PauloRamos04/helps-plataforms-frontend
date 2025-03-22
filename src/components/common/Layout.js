@@ -1,7 +1,13 @@
 import React, { useContext } from 'react';
-import { Outlet, Link, useNavigate } from 'react-router-dom';
-import { Box } from '@mui/material';
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Box, Avatar, Tooltip, Divider } from '@mui/material';
 import AuthContext from '../../context/AuthContext';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import HomeIcon from '@mui/icons-material/Home';
+import AddIcon from '@mui/icons-material/Add';
+import ListIcon from '@mui/icons-material/List';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import LogoutIcon from '@mui/icons-material/Logout';
 
 // Logo da Alares com o "Helps!"
 const Logo = () => (
@@ -35,12 +41,13 @@ const Logo = () => (
 );
 
 // Sidebar Menu Item
-const MenuItem = ({ to, active, children }) => (
+const MenuItem = ({ to, active, icon, children }) => (
   <Box
     component={Link}
     to={to}
     sx={{
-      display: 'block',
+      display: 'flex',
+      alignItems: 'center',
       textDecoration: 'none',
       color: 'white',
       py: 1.5,
@@ -54,6 +61,11 @@ const MenuItem = ({ to, active, children }) => (
       }
     }}
   >
+    {icon && (
+      <Box sx={{ mr: 1.5, display: 'flex', alignItems: 'center' }}>
+        {icon}
+      </Box>
+    )}
     {children}
   </Box>
 );
@@ -62,6 +74,28 @@ const MenuItem = ({ to, active, children }) => (
 function Layout() {
   const { auth, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Verificar se o usuário tem papel de administrador
+  const isAdmin = auth?.user?.roles?.includes('ADMIN') || 
+                  auth?.roles?.includes('ADMIN');
+  
+  // Função para obter o nome do usuário com fallbacks
+  const getUserName = () => {
+    // Tentamos obter o nome de diferentes propriedades possíveis
+    return auth?.user?.name || 
+           auth?.user?.username || 
+           auth?.user?.nome || 
+           auth?.username || 
+           auth?.nome ||
+           'Usuário';
+  };
+  
+  // Função para obter a primeira letra do nome para o Avatar
+  const getInitial = () => {
+    const name = getUserName();
+    return name.charAt(0).toUpperCase();
+  };
   
   const handleLogout = () => {
     logout();
@@ -69,7 +103,7 @@ function Layout() {
   };
 
   // Determinar qual página está ativa baseado na URL atual
-  const pathname = window.location.pathname;
+  const pathname = location.pathname;
   
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
@@ -86,42 +120,87 @@ function Layout() {
       >
         {/* User Profile */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 4, mt: 1 }}>
-          <Box
-            sx={{
-              width: 30,
-              height: 30,
-              borderRadius: '50%',
-              bgcolor: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mr: 2,
-              color: '#4966f2',
-              fontSize: '12px',
-              fontWeight: 'bold'
+          <Tooltip title={getUserName()} placement="right">
+            <Avatar
+              sx={{
+                width: 30,
+                height: 30,
+                bgcolor: 'white',
+                color: '#4966f2',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                mr: 2
+              }}
+            >
+              {getInitial()}
+            </Avatar>
+          </Tooltip>
+          <Box 
+            component="span" 
+            sx={{ 
+              fontSize: '14px', 
+              fontWeight: 'medium',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
             }}
           >
-            {auth?.user?.name?.charAt(0) || 'P'}
-          </Box>
-          <Box component="span" sx={{ fontSize: '14px', fontWeight: 'medium' }}>
-            {auth?.user?.name || 'PAULOFR'}
+            {getUserName()}
           </Box>
         </Box>
         
         {/* Menu Items */}
         <Box sx={{ flex: 1 }}>
-          <MenuItem to="/dashboard" active={pathname === '/dashboard'}>
+          <MenuItem 
+            to="/dashboard" 
+            active={pathname === '/dashboard'}
+            icon={<HomeIcon fontSize="small" />}
+          >
             Página inicial
           </MenuItem>
-          <MenuItem to="/chamados/new" active={pathname === '/chamados/new'}>
+          
+          <MenuItem 
+            to="/chamados/new" 
+            active={pathname === '/chamados/new' || pathname === '/novo-chamado'}
+            icon={<AddIcon fontSize="small" />}
+          >
             Novo chamado
           </MenuItem>
-          <MenuItem to="/chamados" active={pathname === '/chamados'}>
+          
+          <MenuItem 
+            to="/chamados" 
+            active={pathname === '/chamados' || (pathname.startsWith('/chamados/') && pathname !== '/chamados/new')}
+            icon={<ListIcon fontSize="small" />}
+          >
             Meus chamados
           </MenuItem>
-          <MenuItem to="/metricas" active={pathname === '/metricas'}>
+          
+          <MenuItem 
+            to="/metricas" 
+            active={pathname === '/metricas'}
+            icon={<BarChartIcon fontSize="small" />}
+          >
             Minhas métricas
           </MenuItem>
+          
+          {/* Opção de Gerenciamento de Usuários - apenas para administradores */}
+          {isAdmin && (
+            <>
+              <Divider sx={{ my: 2, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
+              
+              <Box sx={{ px: 2, py: 1, fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Administração
+              </Box>
+              
+              <MenuItem 
+                to="/admin/usuarios" 
+                active={pathname === '/admin/usuarios' || pathname === '/admin/usuarios/new'}
+                icon={<PersonAddIcon fontSize="small" />}
+              >
+                Gerenciar Usuários
+              </MenuItem>
+            </>
+          )}
         </Box>
         
         {/* Logo and Logout at bottom */}
@@ -131,7 +210,8 @@ function Layout() {
             component="button"
             onClick={handleLogout}
             sx={{
-              display: 'block',
+              display: 'flex',
+              alignItems: 'center',
               width: '100%',
               border: 'none',
               bgcolor: 'transparent',
@@ -145,6 +225,7 @@ function Layout() {
               }
             }}
           >
+            <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
             Sair
           </Box>
         </Box>

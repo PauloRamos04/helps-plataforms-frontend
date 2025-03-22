@@ -13,6 +13,7 @@ import Dashboard from './pages/Dashboard';
 import ChamadosList from './pages/SolicitacoesList';
 import ChamadoDetail from './pages/ChamadoDetail';
 import ChamadoNew from './pages/NovoChamado';
+import GerenciaUser from './pages/GerenciaUser';
 
 // Componente para rotas protegidas
 const PrivateRoute = ({ children }) => {
@@ -29,7 +30,7 @@ const PrivateRoute = ({ children }) => {
 const HelperRoute = ({ children }) => {
   const { auth } = useContext(AuthContext);
   
-  if (!auth.isAuthenticated || !auth.user.roles.includes('ROLE_HELPER')) {
+  if (!auth.isAuthenticated || !auth.user.roles.includes('HELPER')) {
     return <Navigate to="/dashboard" />;
   }
   
@@ -40,7 +41,18 @@ const HelperRoute = ({ children }) => {
 const UserRoute = ({ children }) => {
   const { auth } = useContext(AuthContext);
   
-  if (!auth.isAuthenticated || auth.user.roles.includes('ROLE_HELPER')) {
+  if (!auth.isAuthenticated || auth.user.roles.includes('USUARIO')) {
+    return <Navigate to="/dashboard" />;
+  }
+  
+  return children;
+};
+
+// Componente para rotas específicas de administradores
+const AdminRoute = ({ children }) => {
+  const { auth } = useContext(AuthContext);
+  
+  if (!auth.isAuthenticated || !auth.user.roles.includes('ADMIN')) {
     return <Navigate to="/dashboard" />;
   }
   
@@ -73,6 +85,13 @@ const AppRoutes = () => {
             <UserRoute>
               <ChamadoNew />
             </UserRoute>
+          } />
+          
+          {/* Rota para gerenciamento de usuários - apenas admin */}
+          <Route path="admin/usuarios" element={
+            <AdminRoute>
+              <GerenciaUser />
+            </AdminRoute>
           } />
         </Route>
         
