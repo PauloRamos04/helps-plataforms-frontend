@@ -1,6 +1,10 @@
+// src/components/common/Layout.js
 import React, { useContext } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Avatar, Tooltip, Divider } from '@mui/material';
+import { 
+  Box, Avatar, Tooltip, Divider, AppBar, Toolbar, 
+  Typography, IconButton 
+} from '@mui/material';
 import AuthContext from '../../context/AuthContext';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import HomeIcon from '@mui/icons-material/Home';
@@ -8,6 +12,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ListIcon from '@mui/icons-material/List';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import LogoutIcon from '@mui/icons-material/Logout';
+import NotificationsMenu from '../notifications/NotificationsMenu';
 
 // Logo da Alares com o "Helps!"
 const Logo = () => (
@@ -116,6 +121,11 @@ function Layout() {
           display: 'flex',
           flexDirection: 'column',
           p: 2,
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          zIndex: 100
         }}
       >
         {/* User Profile */}
@@ -231,13 +241,50 @@ function Layout() {
         </Box>
       </Box>
 
+      {/* Top AppBar */}
+      <AppBar 
+        position="fixed" 
+        sx={{ 
+          width: `calc(100% - 250px)`, 
+          ml: '250px',
+          bgcolor: 'white',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        }}
+      >
+        <Toolbar sx={{ justifyContent: 'flex-end' }}>
+          {/* Notificações */}
+          <NotificationsMenu />
+          
+          {/* Avatar do usuário */}
+          <Tooltip title={getUserName()}>
+            <Avatar
+              sx={{
+                ml: 2,
+                width: 32,
+                height: 32,
+                bgcolor: '#4966f2',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              {getInitial()}
+            </Avatar>
+          </Tooltip>
+        </Toolbar>
+      </AppBar>
+
       {/* Content */}
       <Box
         component="main"
         sx={{
-          flex: 1,
+          flexGrow: 1,
+          ml: '250px',
+          mt: '64px', // altura da AppBar
           bgcolor: '#f5f5f5',
-          overflow: 'auto'
+          overflow: 'auto',
+          minHeight: 'calc(100vh - 64px)'
         }}
       >
         <Outlet />

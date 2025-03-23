@@ -1,22 +1,52 @@
-import React, { useEffect, useState } from 'react';
+// src/pages/ChamadoDetail.js
+import React, { useEffect, useState, useContext } from 'react';
 import {
   Box, Typography, Paper, Button, Grid, Chip, TextField,
   CircularProgress, Alert, Radio, RadioGroup, FormControlLabel,
-  Divider, Card, CardContent, FormControl
+  Divider, Card, CardContent, FormControl, Tabs, Tab, Snackbar
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { chamadoService } from '../api/chamadoService';
+import ChatComponent from '../components/chat/ChatComponent';
+import AuthContext from '../context/AuthContext';
+
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`tabpanel-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 2 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
 
 function ChamadoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { auth } = useContext(AuthContext);
   const [chamado, setChamado] = useState(null);
   const [mensagem, setMensagem] = useState('');
   const [mensagens, setMensagens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [actionInProgress, setActionInProgress] = useState(false);
   const [selectedHelper, setSelectedHelper] = useState('');
+  const [tabValue, setTabValue] = useState(0);
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
 
   useEffect(() => {
     fetchChamado();
@@ -27,7 +57,9 @@ function ChamadoDetail() {
     try {
       setLoading(true);
       setError(null);
+      console.log('Buscando dados do chamado ID:', id);
       const data = await chamadoService.getChamadoById(id);
+      console.log('Dados do chamado recebidos:', data);
       setChamado(data);
       if (data.helper && data.helper.username) {
         setSelectedHelper(data.helper.username);
@@ -42,10 +74,13 @@ function ChamadoDetail() {
 
   const fetchMensagens = async () => {
     try {
+      console.log('Buscando mensagens do chamado ID:', id);
       const data = await chamadoService.getMensagens(id);
+      console.log('Mensagens recebidas:', data);
       setMensagens(data || []);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
+      // Não exibimos erro aqui para não atrapalhar a visualização do chamado
     }
   };
 
@@ -54,12 +89,23 @@ function ChamadoDetail() {
 
     try {
       setSending(true);
-      await chamadoService.enviarMensagem(id, { conteudo: mensagem });
+      const payload = { conteudo: mensagem };
+      console.log('Enviando mensagem:', payload);
+      await chamadoService.enviarMensagem(id, payload);
       setMensagem('');
-      fetchMensagens();
+      await fetchMensagens(); // Recarrega as mensagens após enviar
+      setNotification({
+        open: true,
+        message: 'Mensagem enviada com sucesso!',
+        severity: 'success'
+      });
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
-      alert('Não foi possível enviar a mensagem. Tente novamente.');
+      setNotification({
+        open: true,
+        message: 'Não foi possível enviar a mensagem. Tente novamente.',
+        severity: 'error'
+      });
     } finally {
       setSending(false);
     }
@@ -71,22 +117,56 @@ function ChamadoDetail() {
 
   const handleAderir = async () => {
     try {
+      setActionInProgress(true);
+      console.log('Tentando aderir ao chamado:', id);
       await chamadoService.aderirChamado(id);
-      fetchChamado();
+      await fetchChamado(); // Recarrega o chamado após aderir
+      setNotification({
+        open: true,
+        message: 'Você aderiu ao chamado com sucesso!',
+        severity: 'success'
+      });
     } catch (error) {
       console.error('Erro ao aderir ao chamado:', error);
-      alert('Não foi possível aderir ao chamado. Tente novamente.');
+      setNotification({
+        open: true,
+        message: 'Não foi possível aderir ao chamado. Tente novamente.',
+        severity: 'error'
+      });
+    } finally {
+      setActionInProgress(false);
     }
   };
 
   const handleFinalizar = async () => {
     try {
+      setActionInProgress(true);
+      console.log('Tentando finalizar chamado:', id);
       await chamadoService.finalizarChamado(id);
-      fetchChamado();
+      await fetchChamado(); // Recarrega o chamado após finalizar
+      setNotification({
+        open: true,
+        message: 'Chamado finalizado com sucesso!',
+        severity: 'success'
+      });
     } catch (error) {
       console.error('Erro ao finalizar chamado:', error);
-      alert('Não foi possível finalizar o chamado. Tente novamente.');
+      setNotification({
+        open: true,
+        message: 'Não foi possível finalizar o chamado. Tente novamente.',
+        severity: 'error'
+      });
+    } finally {
+      setActionInProgress(false);
     }
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setTabValue(newValue);
+  };
+
+  const handleCloseNotification = () => {
+    setNotification(prev => ({ ...prev, open: false }));
   };
 
   const getStatusColor = (status) => {
@@ -112,6 +192,18 @@ function ChamadoDetail() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // Verificar se o usuário atual é um helper ou admin
+  const isHelperOrAdmin = () => {
+    if (!auth || !auth.user || !auth.user.roles) return false;
+    
+    return auth.user.roles.some(role => 
+      role === 'HELPER' || 
+      role === 'ADMIN' ||
+      role === 'ROLE_HELPER' || 
+      role === 'ROLE_ADMIN'
+    );
   };
 
   if (loading) {
@@ -183,7 +275,7 @@ function ChamadoDetail() {
             
             <Box sx={{ display: 'flex', mb: 2 }}>
               <Typography sx={{ color: '#666', mr: 1 }}>
-                {`Paulo Ramos`} {/* Aqui você poderia usar chamado.usuario?.nome se disponível */}
+                {`${chamado.usuario?.name || chamado.usuario?.username || 'Usuário'}`}
               </Typography>
               <Typography sx={{ color: '#999', fontSize: '14px' }}>
                 (criou esta solicitação em {formatDate(chamado.dataAbertura)})
@@ -208,69 +300,86 @@ function ChamadoDetail() {
 
             <Divider sx={{ my: 3 }} />
 
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                Conversas
-              </Typography>
-
-              {mensagens.length > 0 ? (
-                mensagens.map((msg, index) => (
-                  <Card key={index} variant="outlined" sx={{ mb: 2, borderRadius: '8px' }}>
-                    <CardContent>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="subtitle2">
-                          {msg.autor?.nome || 'Usuário'}
-                        </Typography>
-                        <Typography variant="caption" color="textSecondary">
-                          {formatDate(msg.dataEnvio)}
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2">
-                        {msg.conteudo}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                ))
-              ) : (
-                <Box sx={{ p: 3, bgcolor: '#f9f9f9', borderRadius: '4px', textAlign: 'center' }}>
-                  <Typography color="textSecondary">
-                    Nenhuma mensagem ainda. Inicie a conversa!
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-
-            <Box sx={{ mt: 3 }}>
-              <TextField
-                fullWidth
-                multiline
-                rows={4}
-                placeholder="Digite sua mensagem aqui..."
-                value={mensagem}
-                onChange={(e) => setMensagem(e.target.value)}
-                variant="outlined"
-                sx={{ 
-                  '.MuiOutlinedInput-root': {
-                    bgcolor: 'white',
-                    borderRadius: '4px'
-                  },
-                  mb: 2
-                }}
-              />
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  variant="contained"
-                  onClick={handleEnviarMensagem}
-                  disabled={sending || !mensagem.trim()}
-                  sx={{ 
-                    bgcolor: '#4966f2',
-                    borderRadius: '4px',
-                    textTransform: 'none'
-                  }}
-                >
-                  {sending ? 'Enviando...' : 'Enviar'}
-                </Button>
+            <Box sx={{ width: '100%', mb: 3 }}>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                <Tabs value={tabValue} onChange={handleTabChange}>
+                  <Tab label="Mensagens" />
+                  <Tab label="Chat em Tempo Real" />
+                </Tabs>
               </Box>
+              
+              <TabPanel value={tabValue} index={0}>
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                    Mensagens
+                  </Typography>
+
+                  {mensagens.length > 0 ? (
+                    mensagens.map((msg, index) => (
+                      <Card key={index} variant="outlined" sx={{ mb: 2, borderRadius: '8px' }}>
+                        <CardContent>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                            <Typography variant="subtitle2">
+                              {msg.remetente?.name || msg.remetente?.username || 'Usuário'}
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              {formatDate(msg.dataEnvio)}
+                            </Typography>
+                          </Box>
+                          <Typography variant="body2">
+                            {msg.conteudo}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <Box sx={{ p: 3, bgcolor: '#f9f9f9', borderRadius: '4px', textAlign: 'center' }}>
+                      <Typography color="textSecondary">
+                        Nenhuma mensagem ainda. Inicie a conversa!
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+
+                <Box sx={{ mt: 3 }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    placeholder="Digite sua mensagem aqui..."
+                    value={mensagem}
+                    onChange={(e) => setMensagem(e.target.value)}
+                    variant="outlined"
+                    sx={{ 
+                      '.MuiOutlinedInput-root': {
+                        bgcolor: 'white',
+                        borderRadius: '4px'
+                      },
+                      mb: 2
+                    }}
+                    disabled={chamado.status === 'FECHADO' || sending}
+                  />
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="contained"
+                      onClick={handleEnviarMensagem}
+                      disabled={sending || !mensagem.trim() || chamado.status === 'FECHADO'}
+                      sx={{ 
+                        bgcolor: '#4966f2',
+                        borderRadius: '4px',
+                        textTransform: 'none'
+                      }}
+                    >
+                      {sending ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Enviar'}
+                    </Button>
+                  </Box>
+                </Box>
+              </TabPanel>
+              
+              <TabPanel value={tabValue} index={1}>
+                {/* Componente do Chat em Tempo Real */}
+                <ChatComponent chamadoId={parseInt(id)} chamadoStatus={chamado.status} />
+              </TabPanel>
             </Box>
           </Grid>
 
@@ -302,35 +411,29 @@ function ChamadoDetail() {
                 Helper Vinculado
               </Typography>
 
-              <FormControl component="fieldset">
-                <RadioGroup value={selectedHelper} onChange={handleHelperChange}>
-                  <FormControlLabel 
-                    value="" 
-                    control={<Radio />} 
-                    label="Helper Vinculado" 
-                    disabled={chamado.status === 'EM_ATENDIMENTO' || chamado.status === 'FECHADO'} 
-                  />
-                  <FormControlLabel 
-                    value="HELPER 1" 
-                    control={<Radio />} 
-                    label="Helper 1" 
-                    disabled={chamado.status === 'EM_ATENDIMENTO' || chamado.status === 'FECHADO'} 
-                  />
-                  <FormControlLabel 
-                    value="HELPER 2" 
-                    control={<Radio />} 
-                    label="Helper 2" 
-                    disabled={chamado.status === 'EM_ATENDIMENTO' || chamado.status === 'FECHADO'} 
-                  />
-                </RadioGroup>
-              </FormControl>
+              {chamado.helper ? (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                    {chamado.helper.name || chamado.helper.username}
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    {chamado.dataInicio ? `Atendendo desde ${formatDate(chamado.dataInicio)}` : ''}
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                  Nenhum helper vinculado
+                </Typography>
+              )}
 
               <Box sx={{ mt: 3 }}>
-                {chamado.status === 'ABERTO' && (
+                {/* Botão de aderir ao chamado - apenas para helpers/admins e apenas para chamados ABERTOS */}
+                {isHelperOrAdmin() && chamado.status === 'ABERTO' && (
                   <Button
                     fullWidth
                     variant="contained"
                     onClick={handleAderir}
+                    disabled={actionInProgress}
                     sx={{ 
                       bgcolor: '#4966f2',
                       borderRadius: '4px',
@@ -338,15 +441,17 @@ function ChamadoDetail() {
                       mb: 2
                     }}
                   >
-                    Aderir ao Chamado
+                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Aderir ao Chamado'}
                   </Button>
                 )}
 
-                {chamado.status === 'EM_ATENDIMENTO' && (
+                {/* Botão de finalizar chamado - apenas para o helper vinculado e apenas para chamados EM_ATENDIMENTO */}
+                {isHelperOrAdmin() && chamado.status === 'EM_ATENDIMENTO' && (
                   <Button
                     fullWidth
                     variant="contained"
                     onClick={handleFinalizar}
+                    disabled={actionInProgress}
                     sx={{ 
                       bgcolor: '#4CAF50',
                       borderRadius: '4px',
@@ -354,7 +459,7 @@ function ChamadoDetail() {
                       mb: 2
                     }}
                   >
-                    Finalizar
+                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Finalizar'}
                   </Button>
                 )}
 
@@ -376,6 +481,22 @@ function ChamadoDetail() {
           </Grid>
         </Grid>
       </Paper>
+
+      {/* Notification Snackbar */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={5000}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseNotification} 
+          severity={notification.severity} 
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

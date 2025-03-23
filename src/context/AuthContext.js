@@ -1,3 +1,4 @@
+// src/context/AuthContext.js
 import React, { createContext, useState, useEffect } from 'react';
 import { authService } from '../api';
 
@@ -10,7 +11,8 @@ const AuthContext = createContext({
   },
   login: () => {},
   logout: () => {},
-  isLoading: false
+  isLoading: false,
+  hasRole: () => false
 });
 
 // Provider component
@@ -36,6 +38,14 @@ export const AuthProvider = ({ children }) => {
           try {
             const user = JSON.parse(userStr);
             
+            // Garantir que o usuário tem um array de roles
+            if (!user.roles) {
+              user.roles = [];
+            } else if (!Array.isArray(user.roles)) {
+              // Se roles não for um array, converter para array
+              user.roles = [user.roles];
+            }
+            
             setAuth({
               isAuthenticated: true,
               user,
@@ -43,6 +53,7 @@ export const AuthProvider = ({ children }) => {
             });
             
             console.log('Auth initialized from localStorage - user:', user.username);
+            console.log('User roles:', user.roles);
           } catch (error) {
             console.error('Error parsing user JSON:', error);
             // Clear invalid data
@@ -70,12 +81,22 @@ export const AuthProvider = ({ children }) => {
       if (response.success) {
         console.log('Login successful, updating state');
         
+        // Garantir que o usuário tem um array de roles
+        const user = response.user;
+        if (!user.roles) {
+          user.roles = [];
+        } else if (!Array.isArray(user.roles)) {
+          user.roles = [user.roles];
+        }
+        
         // Update auth state
         setAuth({
           isAuthenticated: true,
-          user: response.user,
+          user: user,
           token: response.token
         });
+        
+        console.log('User roles after login:', user.roles);
       } else {
         console.log('Login failed:', response.message);
       }
@@ -102,13 +123,35 @@ export const AuthProvider = ({ children }) => {
       token: null
     });
   };
+  
+  // Function to check if user has a specific role
+  const hasRole = (roleToCheck) => {
+    if (!auth.isAuthenticated || !auth.user || !auth.user.roles) {
+      return false;
+    }
+    
+    // Normalizar o nome do role (remover prefixo ROLE_ se necessário)
+    const normalizeRole = (role) => {
+      if (typeof role !== 'string') return '';
+      return role.replace('ROLE_', '').toUpperCase();
+    };
+    
+    const normalizedRoleToCheck = normalizeRole(roleToCheck);
+    
+    // Verificar se o usuário tem o role procurado
+    return auth.user.roles.some(role => {
+      const normalizedUserRole = normalizeRole(role);
+      return normalizedUserRole === normalizedRoleToCheck;
+    });
+  };
 
   // Value to provide to context consumers
   const contextValue = {
     auth,
     login,
     logout,
-    isLoading
+    isLoading,
+    hasRole
   };
 
   return (

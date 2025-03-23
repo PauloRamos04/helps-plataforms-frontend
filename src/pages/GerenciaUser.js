@@ -123,7 +123,7 @@ const UsersList = ({ users, onRefresh }) => {
                       return (
                         <Chip 
                           key={role}
-                          label={role.replace('')} 
+                          label={role} 
                           size="small" 
                           sx={{ 
                             bgcolor: bg, 

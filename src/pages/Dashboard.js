@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
-import { chamadoService } from '../api';
+import { chamadoService } from '../api/chamadoService'; // Importação corrigida
 
 function Dashboard() {
   const { auth } = useContext(AuthContext);

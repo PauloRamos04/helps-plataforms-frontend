@@ -146,7 +146,7 @@ function Login() {
           {/* Campo de usuário */}
           <TextField
             fullWidth
-            placeholder="CPF"
+            placeholder="Username"
             name="username"
             value={formData.username}
             onChange={handleChange}
