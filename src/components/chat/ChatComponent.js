@@ -20,22 +20,10 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const [notification, setNotification] = useState({ open: false, message: '', type: 'info' });
   const messagesEndRef = useRef(null);
   const pollingIntervalRef = useRef(null);
-  const lastMessageIdRef = useRef(null);
   const isWebSocketEnabled = true;
-
-  console.log("Usuário atual:", auth.user);
 
   const isCurrentUserMessage = (message) => {
     const currentUserId = auth.user?.id;
-    
-    console.log("Verificando mensagem:", {
-      messageId: message.id,
-      senderId: message.senderId,
-      remetenteId: message.remetente?.id,
-      currentUserId: currentUserId,
-      isSame: (message.senderId === currentUserId || message.remetente?.id === currentUserId)
-    });
-    
     return message.senderId === currentUserId || message.remetente?.id === currentUserId;
   };
 
@@ -90,14 +78,8 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       }
       
       const data = await chamadoService.getMensagens(chamadoId);
-      console.log("Mensagens recebidas da API:", data);
       
       if (data && Array.isArray(data)) {
-        if (data.length > 0) {
-          const lastMessageId = Math.max(...data.map(msg => msg.id));
-          lastMessageIdRef.current = lastMessageId;
-        }
-        
         const formattedMessages = data.map(msg => ({
           id: msg.id,
           type: 'CHAT',
@@ -116,7 +98,6 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         setMessages([]);
       }
     } catch (err) {
-      console.error('Erro ao carregar mensagens:', err);
       if (!silent) {
         setError('Não foi possível carregar as mensagens. Tente novamente.');
       }
@@ -133,11 +114,8 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     }
     
     pollingIntervalRef.current = setInterval(() => {
-      console.log("Executando polling automático...");
-      fetchMessages(true); // Buscar mensagens silenciosamente
+      fetchMessages(true);
     }, 5000);
-    
-    console.log('Polling de mensagens iniciado (5 segundos)');
   };
 
   const connectWebSocket = () => {
@@ -148,11 +126,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     
     websocketService.connect(
       () => {
-        console.log('WebSocket conectado com sucesso');
-        
         const success = websocketService.subscribeToChamado(chamadoId, (message) => {
-          console.log('Mensagem recebida via WebSocket:', message);
-          
           if (message.type === 'CHAT') {
             setMessages(prev => {
               const exists = prev.some(m => m.id === message.id);
@@ -182,7 +156,6 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         }
       },
       (error) => {
-        console.error('Erro na conexão WebSocket:', error);
         setError('Usando modo alternativo para receber mensagens.');
         setIsConnecting(false);
         startPolling();
@@ -193,19 +166,14 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   useEffect(() => {
     if (!chamadoId) return;
     
-    console.log(`Inicializando chat para chamado #${chamadoId}`);
-    
     fetchMessages();
     
     connectWebSocket();
     startPolling();
     
     return () => {
-      console.log("Limpando recursos do chat...");
-      
       if (websocketService.isConnected) {
         websocketService.unsubscribeFromChamado(chamadoId);
-        websocketService.disconnect();
       }
       
       if (pollingIntervalRef.current) {
@@ -255,18 +223,13 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       }
       
       if (!success) {
-        console.log("Enviando mensagem via API REST:", { conteudo: currentMessage });
-        const response = await chamadoService.enviarMensagem(chamadoId, { conteudo: currentMessage });
-        
-        console.log("Resposta ao enviar mensagem:", response);
+        await chamadoService.enviarMensagem(chamadoId, { conteudo: currentMessage });
         
         setMessages(prev => prev.filter(m => m.id !== optimisticId));
         
         fetchMessages(true);
       }
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
       
       setMessageInput(currentMessage);
@@ -339,7 +302,6 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         overflow: 'hidden'
       }}
     >
-      {/* Header */}
       <Box 
         sx={{ 
           p: 2, 
@@ -365,14 +327,12 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         </Tooltip>
       </Box>
       
-      {/* Error message */}
       {error && (
         <Alert severity="info" sx={{ m: 1 }}>
           {error}
         </Alert>
       )}
       
-      {/* Messages area */}
       <Box 
         sx={{ 
           flexGrow: 1, 
@@ -516,7 +476,6 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         )}
       </Box>
       
-      {/* Input area */}
       <Box 
         sx={{ 
           p: 2, 
@@ -581,7 +540,6 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         )}
       </Box>
       
-      {/* Notification */}
       <Snackbar
         open={notification.open}
         autoHideDuration={4000}

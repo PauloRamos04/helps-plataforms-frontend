@@ -1,22 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import AuthContext from '../context/AuthContext';
 import websocketService from '../api/websocketService';
-import axios from 'axios';
-
-
-const fetchUnreadNotifications = async () => {
-    try {
-        const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8080'}/notifications/unread`, {
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-        return response.data;
-    } catch (error) {
-        console.error('Erro ao obter notificações:', error);
-        return [];
-    }
-};
+import notificationService from '../api/notificationService';
 
 const useNotifications = () => {
     const { auth } = useContext(AuthContext);
@@ -29,26 +14,19 @@ const useNotifications = () => {
 
         setLoading(true);
         try {
-            const data = await fetchUnreadNotifications();
+            const data = await notificationService.getUnreadNotifications();
             setNotifications(data);
             setUnreadCount(data.length);
         } catch (error) {
-            console.error('Erro ao carregar notificações:', error);
+            // Silenciar erros para experiência do usuário
         } finally {
             setLoading(false);
         }
     };
+
     const markAsRead = async (notificationId) => {
         try {
-            await axios.patch(
-                `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}/notifications/${notificationId}/read`,
-                {},
-                {
-                    headers: {
-                        Authorization: `Bearer ${localStorage.getItem('token')}`
-                    }
-                }
-            );
+            await notificationService.markAsRead(notificationId);
             setNotifications(prev =>
                 prev.map(notification =>
                     notification.id === notificationId
@@ -59,21 +37,13 @@ const useNotifications = () => {
 
             setUnreadCount(prev => Math.max(0, prev - 1));
         } catch (error) {
-            console.error('Erro ao marcar notificação como lida:', error);
+            // Silenciar erros para experiência do usuário
         }
     };
 
     const markAllAsRead = async () => {
         try {
-            await axios.patch(
-                `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}/notifications/mark-all-read`,
-                {},
-                {
-                    headers: {
-                        Authorization: `Bearer ${localStorage.getItem('token')}`
-                    }
-                }
-            );
+            await notificationService.markAllAsRead();
 
             setNotifications(prev =>
                 prev.map(notification => ({ ...notification, read: true }))
@@ -81,7 +51,7 @@ const useNotifications = () => {
 
             setUnreadCount(0);
         } catch (error) {
-            console.error('Erro ao marcar todas notificações como lidas:', error);
+            // Silenciar erros para experiência do usuário
         }
     };
 
@@ -94,26 +64,21 @@ const useNotifications = () => {
             if (!websocketService.isConnected) {
                 websocketService.connect(
                     () => {
-                        console.log('Conectado para receber notificações');
-
                         const username = auth.user?.username;
+                        
                         if (username) {
-                            const userNotificationTopic = `/user/${username}/queue/notifications`;
-
-                            websocketService.stompClient.subscribe(
-                                userNotificationTopic,
-                                (payload) => {
-                                    const notification = JSON.parse(payload.body);
-
+                            websocketService.subscribeToNotifications(
+                                auth.user?.id,
+                                username,
+                                (notification) => {
                                     setNotifications(prev => [notification, ...prev]);
-
                                     setUnreadCount(prev => prev + 1);
                                 }
                             );
                         }
                     },
                     (error) => {
-                        console.error('Erro ao conectar para notificações:', error);
+                        // Silenciar erros para experiência do usuário
                     }
                 );
             }
@@ -121,7 +86,11 @@ const useNotifications = () => {
 
         setupNotificationListener();
 
+        // Polling como fallback
+        const interval = setInterval(loadNotifications, 30000);
+        
         return () => {
+            clearInterval(interval);
         };
     }, [auth.isAuthenticated, auth.user]);
 

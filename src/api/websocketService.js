@@ -20,19 +20,15 @@ class WebSocketService {
         
         const token = localStorage.getItem('token');
         if (!token) {
-          console.error('No authentication token available for WebSocket connection');
           if (onError) onError(new Error('Falha na autenticação para conexão WebSocket'));
           return;
         }
         
         const socketUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}/ws`;
-        console.log('Conectando ao WebSocket em:', socketUrl);
         
         const socket = new SockJS(socketUrl, null, {
           transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
-          xhrFields: {
-            withCredentials: false
-          }
+          xhrFields: { withCredentials: false }
         });
         
         if (socket.xhr && socket.xhr.withCredentials !== undefined) {
@@ -45,19 +41,14 @@ class WebSocketService {
         });
         
         this.stompClient.connect(
-          {
-            'Authorization': `Bearer ${token}`
-          },
+          { 'Authorization': `Bearer ${token}` },
           () => {
             this.isConnected = true;
             this.reconnectAttempts = 0;
-            console.log('WebSocket conectado com sucesso');
             
             if (onConnected) onConnected();
           },
-
           (error) => {
-            console.error('Erro de conexão WebSocket:', error);
             this.isConnected = false;
             
             if (onError) onError(error);
@@ -69,7 +60,6 @@ class WebSocketService {
 
         const self = this;
         socket.onclose = function(event) {
-          console.log(`Conexão WebSocket fechada. Código: ${event.code}, Razão: ${event.reason}`);
           self.isConnected = false;
           
           if (event.code !== 1000) {
@@ -77,20 +67,16 @@ class WebSocketService {
           }
         };
       } catch (error) {
-        console.error('Erro ao inicializar WebSocket:', error);
         if (onError) onError(error);
       }
     }
     
     _scheduleReconnection(onConnected, onError) {
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.log(`Máximo de ${this.maxReconnectAttempts} tentativas de reconexão atingido. Desistindo.`);
         return;
       }
       
       const delay = Math.min(30000, 1000 * Math.pow(2, this.reconnectAttempts));
-      
-      console.log(`Tentando reconectar WebSocket em ${delay/1000} segundos... (tentativa ${this.reconnectAttempts + 1})`);
       
       const self = this;
       this.reconnectTimeout = setTimeout(function() {
@@ -100,25 +86,129 @@ class WebSocketService {
     }
   
     disconnect() {
-      // ... implementação existente ...
+      if (this.stompClient && this.isConnected) {
+        this.subscriptions.forEach((_, destination) => {
+          this.unsubscribe(destination);
+        });
+        
+        try {
+          this.stompClient.disconnect();
+        } catch (error) {
+          // Silenciar erro de desconexão
+        }
+        
+        this.isConnected = false;
+      }
+      
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
     }
   
     subscribeToChamado(chamadoId, onMessageReceived) {
-      // ... implementação existente ...
+      if (!this.isConnected || !this.stompClient) {
+        return false;
+      }
+      
+      const destination = `/topic/chamado/${chamadoId}`;
+      
+      try {
+        if (!this.subscriptions.has(destination)) {
+          const subscription = this.stompClient.subscribe(destination, (message) => {
+            try {
+              const parsedMessage = JSON.parse(message.body);
+              if (onMessageReceived) {
+                onMessageReceived(parsedMessage);
+              }
+            } catch (error) {
+              // Silenciar erros de parsing
+            }
+          });
+          
+          this.subscriptions.set(destination, subscription);
+        }
+        
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+  
+    unsubscribe(destination) {
+      const subscription = this.subscriptions.get(destination);
+      if (subscription) {
+        try {
+          subscription.unsubscribe();
+        } catch (error) {
+          // Silenciar erro de unsubscribe
+        }
+        
+        this.subscriptions.delete(destination);
+      }
     }
   
     unsubscribeFromChamado(chamadoId) {
-      // ... implementação existente ...
+      const destination = `/topic/chamado/${chamadoId}`;
+      this.unsubscribe(destination);
     }
   
     sendMessage(chamadoId, message) {
-      // ... implementação existente ...
+      if (!this.isConnected || !this.stompClient) {
+        return false;
+      }
+      
+      try {
+        this.stompClient.send(`/app/chat.sendMessage/${chamadoId}`, JSON.stringify(message));
+        return true;
+      } catch (error) {
+        return false;
+      }
     }
   
     addUser(chamadoId, user) {
-      // ... implementação existente ...
+      if (!this.isConnected || !this.stompClient) {
+        return false;
+      }
+      
+      try {
+        this.stompClient.send(`/app/chat.addUser/${chamadoId}`, JSON.stringify(user));
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+    
+    subscribeToNotifications(userId, username, onNotificationReceived) {
+      if (!this.isConnected || !this.stompClient || !username) {
+        return false;
+      }
+      
+      const destination = `/user/${username}/queue/notifications`;
+      
+      try {
+        if (!this.subscriptions.has(destination)) {
+          const subscription = this.stompClient.subscribe(destination, (message) => {
+            try {
+              const parsedNotification = JSON.parse(message.body);
+              if (onNotificationReceived) {
+                onNotificationReceived(parsedNotification);
+              }
+            } catch (error) {
+              // Silenciar erros de parsing
+            }
+          });
+          
+          this.subscriptions.set(destination, subscription);
+        }
+        
+        return true;
+      } catch (error) {
+        return false;
+      }
     }
 }
+
 const websocketService = new WebSocketService();
 
 export default websocketService;

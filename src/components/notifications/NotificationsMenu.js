@@ -1,4 +1,3 @@
-// src/components/notifications/NotificationsMenu.js
 import React, { useState, useEffect } from 'react';
 import {
   Badge, IconButton, Menu, MenuItem, Typography, Box, 
@@ -6,41 +5,24 @@ import {
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useNavigate } from 'react-router-dom';
+import useNotifications from '../../hooks/useNotifications';
 
 const NotificationsMenu = () => {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(false);
   
-  useEffect(() => {
-    setNotifications([
-      {
-        id: 1,
-        message: 'Nova mensagem no chamado #123',
-        timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 minutos atrás
-        read: false,
-        chamadoId: 123
-      },
-      {
-        id: 2,
-        message: 'Chamado #456 foi atualizado',
-        timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutos atrás
-        read: false,
-        chamadoId: 456
-      }
-    ]);
-  }, []);
-  
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const { 
+    notifications, 
+    unreadCount, 
+    loading, 
+    markAsRead, 
+    markAllAsRead, 
+    refreshNotifications 
+  } = useNotifications();
   
   const handleOpenMenu = (event) => {
     setAnchorEl(event.currentTarget);
-    setLoading(true);
-
-    setTimeout(() => {
-      setLoading(false);
-    }, 800);
+    refreshNotifications();
   };
   
   const handleCloseMenu = () => {
@@ -48,9 +30,7 @@ const NotificationsMenu = () => {
   };
   
   const handleNotificationClick = (notification) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-    );
+    markAsRead(notification.id);
     
     if (notification.chamadoId) {
       navigate(`/chamados/${notification.chamadoId}`);
@@ -60,7 +40,7 @@ const NotificationsMenu = () => {
   };
   
   const handleMarkAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    markAllAsRead();
     handleCloseMenu();
   };
   
@@ -149,7 +129,7 @@ const NotificationsMenu = () => {
                     }
                     secondary={
                       <Typography variant="caption" color="textSecondary">
-                        {formatRelativeTime(notification.timestamp)}
+                        {formatRelativeTime(notification.createdAt)}
                       </Typography>
                     }
                   />
