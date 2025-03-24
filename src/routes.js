@@ -1,19 +1,21 @@
+// src/routes.js
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useContext } from 'react';
-import AuthContext from './context/AuthContext';
 
 // Layout
 import Layout from './components/common/Layout';
 
-// Páginas
+// Pages
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import ChamadosList from './pages/SolicitacoesList';
 import ChamadoDetail from './pages/ChamadoDetail';
 import ChamadoNew from './pages/NovoChamado';
 import GerenciaUser from './pages/GerenciaUser';
+
+// Import context
+import AuthContext from './context/AuthContext';
 
 // Componente para rotas protegidas
 const PrivateRoute = ({ children }) => {
@@ -30,7 +32,7 @@ const PrivateRoute = ({ children }) => {
 const HelperRoute = ({ children }) => {
   const { auth } = useContext(AuthContext);
   
-  if (!auth.isAuthenticated || !auth.user.roles.includes('HELPER')) {
+  if (!auth.isAuthenticated || !auth.user?.roles?.includes('HELPER')) {
     return <Navigate to="/dashboard" />;
   }
   
@@ -41,7 +43,7 @@ const HelperRoute = ({ children }) => {
 const UserRoute = ({ children }) => {
   const { auth } = useContext(AuthContext);
   
-  if (!auth.isAuthenticated || auth.user.roles.includes('USUARIO')) {
+  if (!auth.isAuthenticated || auth.user?.roles?.includes('USUARIO')) {
     return <Navigate to="/dashboard" />;
   }
   
@@ -52,7 +54,7 @@ const UserRoute = ({ children }) => {
 const AdminRoute = ({ children }) => {
   const { auth } = useContext(AuthContext);
   
-  if (!auth.isAuthenticated || !auth.user.roles.includes('ADMIN')) {
+  if (!auth.isAuthenticated || !auth.user?.roles?.includes('ADMIN')) {
     return <Navigate to="/dashboard" />;
   }
   
@@ -65,7 +67,6 @@ const AppRoutes = () => {
       <Routes>
         {/* Rotas públicas */}
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
         
         {/* Rotas protegidas dentro do Layout */}
         <Route path="/" element={

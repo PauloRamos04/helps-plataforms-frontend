@@ -1,8 +1,6 @@
-// src/api/userService.js
 import api from '../api';
 
 export const userService = {
-  // Obter todos os usuários
   getAllUsers: async () => {
     try {
       const response = await api.get('/admin/users');
@@ -12,8 +10,7 @@ export const userService = {
       throw error;
     }
   },
-  
-  // Obter um usuário específico por ID
+
   getUserById: async (id) => {
     try {
       const response = await api.get(`/admin/users/${id}`);
@@ -24,10 +21,8 @@ export const userService = {
     }
   },
   
-  // Criar um novo usuário com role específica
   createUserWithRole: async (userData) => {
     try {
-      // Adicionar log para verificar os dados sendo enviados
       console.log('Enviando dados para criar usuário:', userData);
       
       const response = await api.post('/admin/users', userData);
@@ -40,7 +35,6 @@ export const userService = {
     }
   },
   
-  // Deletar um usuário
   deleteUser: async (id) => {
     try {
       const response = await api.delete(`/admin/users/${id}`);
@@ -51,7 +45,6 @@ export const userService = {
     }
   },
   
-  // Atualizar o status de um usuário (ativar/desativar)
   updateUserStatus: async (id, enabled) => {
     try {
       const response = await api.patch(`/admin/users/${id}/status`, { enabled });

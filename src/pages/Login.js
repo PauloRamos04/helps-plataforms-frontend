@@ -1,3 +1,4 @@
+// src/pages/Login.js
 import React, { useState, useContext, useEffect } from 'react';
 import { 
   Box, Container, Typography, Paper, TextField, 
@@ -5,6 +6,27 @@ import {
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
+
+// Define validation functions directly in this component
+const validateRequired = (value, fieldName) => {
+  if (!value || (typeof value === 'string' && !value.trim())) {
+    return `${fieldName} é obrigatório`;
+  }
+  return '';
+};
+
+const validateUsername = (value) => {
+  if (!value) return '';
+  
+  if (value.length < 3) {
+    return 'Nome de usuário deve ter pelo menos 3 caracteres';
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+    return 'Nome de usuário deve conter apenas letras, números e underscores';
+  }
+  
+  return '';
+};
 
 function Login() {
   const navigate = useNavigate();
@@ -31,7 +53,7 @@ function Login() {
       [name]: value
     }));
     
-    // Limpa o erro desse campo quando o usuário digita
+    // Clear the error for this field when the user changes it
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -43,13 +65,14 @@ function Login() {
   const validate = () => {
     const newErrors = {};
     
-    if (!formData.username.trim()) {
-      newErrors.username = 'O nome de usuário é obrigatório';
-    }
+    // Username validation
+    const usernameError = validateRequired(formData.username, 'Nome de usuário') || 
+                          validateUsername(formData.username);
+    if (usernameError) newErrors.username = usernameError;
     
-    if (!formData.password) {
-      newErrors.password = 'A senha é obrigatória';
-    }
+    // Password validation
+    const passwordError = validateRequired(formData.password, 'Senha');
+    if (passwordError) newErrors.password = passwordError;
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -66,13 +89,13 @@ function Login() {
     try {
       setLoading(true);
       
-      // Criando o objeto de requisição conforme esperado pelo back-end
+      // Create login request object as expected by the backend
       const loginRequest = {
         username: formData.username,
         password: formData.password
       };
       
-      // Fazer a requisição ao backend
+      // Send login request to backend
       const result = await login(loginRequest);
       
       if (result.success) {
@@ -81,7 +104,7 @@ function Login() {
         setLoginError(result.message || 'Credenciais inválidas');
       }
     } catch (error) {
-      console.error('Erro de login:', error);
+      console.error('Login error:', error);
       setLoginError('Ocorreu um erro durante o login. Por favor, tente novamente.');
     } finally {
       setLoading(false);
@@ -94,7 +117,7 @@ function Login() {
       justifyContent: 'center', 
       alignItems: 'center', 
       minHeight: '100vh',
-      bgcolor: '#1a1a1a' // Fundo escuro como na screenshot
+      bgcolor: '#1a1a1a' // Dark background as in screenshot
     }}>
       <Paper 
         elevation={3} 
@@ -125,7 +148,7 @@ function Login() {
           <Box component="span" sx={{ ml: 0.5, fontSize: '16px' }}>➚</Box>
         </Box>
         
-        {/* Título "Ei, dá um Helps!" */}
+        {/* Title "Ei, dá um Helps!" */}
         <Box sx={{ mb: 3, textAlign: 'center' }}>
           <Typography variant="h5" component="h1" sx={{ color: '#333', fontWeight: 'bold' }}>
             Ei, dá um
@@ -135,7 +158,7 @@ function Login() {
           </Typography>
         </Box>
         
-        {/* Formulário de Login */}
+        {/* Login Form */}
         <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
           {loginError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -143,7 +166,7 @@ function Login() {
             </Alert>
           )}
           
-          {/* Campo de usuário */}
+          {/* Username field */}
           <TextField
             fullWidth
             placeholder="Username"
@@ -163,7 +186,7 @@ function Login() {
             }}
           />
           
-          {/* Campo de senha */}
+          {/* Password field */}
           <TextField
             fullWidth
             placeholder="Senha"
@@ -184,7 +207,7 @@ function Login() {
             }}
           />
           
-          {/* Botão de login */}
+          {/* Login button */}
           <Button
             type="submit"
             fullWidth

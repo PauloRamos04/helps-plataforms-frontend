@@ -1,3 +1,4 @@
+// src/pages/GerenciaUser.js
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Paper, Button, TextField, MenuItem, Select,
@@ -12,6 +13,38 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import userService from '../api/userService';
+
+// Define validation functions directly in this component
+const validateRequired = (value, fieldName) => {
+  if (!value || (typeof value === 'string' && !value.trim())) {
+    return `${fieldName} é obrigatório`;
+  }
+  return '';
+};
+
+const validateUsername = (value) => {
+  if (!value) return '';
+  
+  if (value.length < 3) {
+    return 'Nome de usuário deve ter pelo menos 3 caracteres';
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+    return 'Nome de usuário deve conter apenas letras, números e underscores';
+  }
+  
+  return '';
+};
+
+const validatePassword = (value) => {
+  if (!value) return '';
+  
+  const errors = [];
+  if (value.length < 6) {
+    errors.push('Senha deve ter pelo menos 6 caracteres');
+  }
+  
+  return errors.join('. ');
+};
 
 // Componente para listar usuários
 const UsersList = ({ users, onRefresh }) => {
@@ -264,6 +297,8 @@ const UserForm = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  // Add fieldErrors state
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -271,26 +306,43 @@ const UserForm = () => {
       ...prev,
       [name]: value
     }));
+    
+    // Clear the error for this field when the user changes it
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
+    
+    // Validate form fields
+    const validationErrors = {};
+    
+    // Username validation
+    const usernameError = validateRequired(formData.username, 'Nome de usuário') || 
+                          validateUsername(formData.username);
+    if (usernameError) validationErrors.username = usernameError;
+    
+    // Password validation
+    const passwordError = validateRequired(formData.password, 'Senha') || 
+                          validatePassword(formData.password);
+    if (passwordError) validationErrors.password = passwordError;
+    
+    // If there are validation errors, show them and stop submission
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      setLoading(false);
+      return;
+    }
+    
     try {
-      // Garantir que todos os campos obrigatórios estão preenchidos
-      if (!formData.username || !formData.password) {
-        throw new Error('Nome de usuário e senha são obrigatórios');
-      }
-
-      // Garantir que a senha tem pelo menos 6 caracteres
-      if (formData.password.length < 6) {
-        throw new Error('A senha deve ter pelo menos 6 caracteres');
-      }
-
-      console.log('Dados do formulário:', formData);
-
+      // Call the API to create the user
       await userService.createUserWithRole({
         username: formData.username,
         password: formData.password,
@@ -299,6 +351,8 @@ const UserForm = () => {
       });
 
       setSuccessMessage('Usuário criado com sucesso!');
+      
+      // Clear the form after successful submission
       setFormData({
         username: '',
         password: '',
@@ -308,13 +362,9 @@ const UserForm = () => {
     } catch (err) {
       console.error('Erro ao criar usuário:', err);
       
-      // Verificar se é um erro controlado
-      if (err.message) {
-        setError(err.message);
-      } else {
-        // Tentar extrair mensagem de erro da resposta da API
-        setError(err.response?.data?.message || 'Erro ao criar usuário. Verifique os dados e tente novamente.');
-      }
+      // Extract error message from response
+      const errorMessage = err.response?.data?.message || 'Erro ao criar usuário. Verifique os dados e tente novamente.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -344,6 +394,8 @@ const UserForm = () => {
         required
         sx={{ mb: 2 }}
         inputProps={{ maxLength: 50 }}
+        error={!!fieldErrors.username}
+        helperText={fieldErrors.username || ''}
       />
 
       <TextField
@@ -368,7 +420,8 @@ const UserForm = () => {
         required
         sx={{ mb: 2 }}
         inputProps={{ minLength: 6 }}
-        helperText="A senha deve ter pelo menos 6 caracteres"
+        error={!!fieldErrors.password}
+        helperText={fieldErrors.password || "A senha deve ter pelo menos 6 caracteres"}
       />
 
       <FormControl fullWidth margin="normal" sx={{ mb: 2 }}>

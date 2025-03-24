@@ -14,7 +14,6 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import LogoutIcon from '@mui/icons-material/Logout';
 import NotificationsMenu from '../notifications/NotificationsMenu';
 
-// Logo da Alares com o "Helps!"
 const Logo = () => (
   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
     <Box 
@@ -45,7 +44,6 @@ const Logo = () => (
   </Box>
 );
 
-// Sidebar Menu Item
 const MenuItem = ({ to, active, icon, children }) => (
   <Box
     component={Link}
@@ -75,19 +73,15 @@ const MenuItem = ({ to, active, icon, children }) => (
   </Box>
 );
 
-// Componente principal de Layout
 function Layout() {
   const { auth, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Verificar se o usuário tem papel de administrador
   const isAdmin = auth?.user?.roles?.includes('ADMIN') || 
                   auth?.roles?.includes('ADMIN');
-  
-  // Função para obter o nome do usuário com fallbacks
+
   const getUserName = () => {
-    // Tentamos obter o nome de diferentes propriedades possíveis
     return auth?.user?.name || 
            auth?.user?.username || 
            auth?.user?.nome || 
@@ -96,7 +90,6 @@ function Layout() {
            'Usuário';
   };
   
-  // Função para obter a primeira letra do nome para o Avatar
   const getInitial = () => {
     const name = getUserName();
     return name.charAt(0).toUpperCase();
@@ -107,7 +100,6 @@ function Layout() {
     navigate('/login');
   };
 
-  // Determinar qual página está ativa baseado na URL atual
   const pathname = location.pathname;
   
   return (
@@ -116,7 +108,7 @@ function Layout() {
       <Box
         sx={{
           width: 250,
-          bgcolor: '#4966f2', // Cor azul do sidebar como nas screenshots
+          bgcolor: '#4966f2',
           color: 'white',
           display: 'flex',
           flexDirection: 'column',
@@ -128,36 +120,8 @@ function Layout() {
           zIndex: 100
         }}
       >
-        {/* User Profile */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 4, mt: 1 }}>
-          <Tooltip title={getUserName()} placement="right">
-            <Avatar
-              sx={{
-                width: 30,
-                height: 30,
-                bgcolor: 'white',
-                color: '#4966f2',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                mr: 2
-              }}
-            >
-              {getInitial()}
-            </Avatar>
-          </Tooltip>
-          <Box 
-            component="span" 
-            sx={{ 
-              fontSize: '14px', 
-              fontWeight: 'medium',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {getUserName()}
-          </Box>
-        </Box>
+        {/* Logo no topo */}
+        <Logo />
         
         {/* Menu Items */}
         <Box sx={{ flex: 1 }}>
@@ -213,9 +177,8 @@ function Layout() {
           )}
         </Box>
         
-        {/* Logo and Logout at bottom */}
+        {/* Logout at bottom */}
         <Box sx={{ mt: 'auto' }}>
-          <Logo />
           <Box
             component="button"
             onClick={handleLogout}
@@ -251,27 +214,35 @@ function Layout() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         }}
       >
-        <Toolbar sx={{ justifyContent: 'flex-end' }}>
-          {/* Notificações */}
-          <NotificationsMenu />
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
+          {/* Nome do usuário à esquerda */}
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Typography variant="subtitle1" sx={{ color: '#333', fontWeight: 'medium' }}>
+              Olá, {getUserName()}
+            </Typography>
+          </Box>
           
-          {/* Avatar do usuário */}
-          <Tooltip title={getUserName()}>
-            <Avatar
-              sx={{
-                ml: 2,
-                width: 32,
-                height: 32,
-                bgcolor: '#4966f2',
-                color: 'white',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              {getInitial()}
-            </Avatar>
-          </Tooltip>
+          {/* Notificações e Avatar à direita */}
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <NotificationsMenu />
+            
+            <Tooltip title={getUserName()}>
+              <Avatar
+                sx={{
+                  ml: 2,
+                  width: 32,
+                  height: 32,
+                  bgcolor: '#4966f2',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                {getInitial()}
+              </Avatar>
+            </Tooltip>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -281,7 +252,7 @@ function Layout() {
         sx={{
           flexGrow: 1,
           ml: '250px',
-          mt: '64px', // altura da AppBar
+          mt: '64px',
           bgcolor: '#f5f5f5',
           overflow: 'auto',
           minHeight: 'calc(100vh - 64px)'

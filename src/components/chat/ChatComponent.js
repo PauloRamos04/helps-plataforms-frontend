@@ -1,4 +1,3 @@
-// src/components/chat/ChatComponent.js
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   Box, Typography, TextField, Button, Paper, Avatar,
@@ -10,96 +9,6 @@ import AuthContext from '../../context/AuthContext';
 import websocketService from '../../api/websocketService';
 import { chamadoService } from '../../api/chamadoService';
 
-// Componente para exibir uma mensagem no chat
-const ChatMessage = ({ message, isOwn }) => {
-  // Extrair a data da mensagem, seja do formato de websocket ou do formato da API REST
-  const timestamp = message.timestamp || message.dataEnvio;
-  
-  const messageTime = timestamp ? 
-    new Date(timestamp).toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    }) : 
-    '';
-
-  // Extrair o nome do remetente, independente do formato da mensagem
-  const senderName = message.senderName || 
-                    message.remetente?.name || 
-                    message.remetente?.username || 
-                    'Usuário';
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: isOwn ? 'row-reverse' : 'row',
-        mb: 2,
-        maxWidth: '80%',
-        alignSelf: isOwn ? 'flex-end' : 'flex-start'
-      }}
-    >
-      <Avatar
-        sx={{
-          width: 32,
-          height: 32,
-          bgcolor: isOwn ? '#4966f2' : '#e0e0e0',
-          color: isOwn ? 'white' : '#333',
-          fontSize: '14px',
-          mr: isOwn ? 0 : 1,
-          ml: isOwn ? 1 : 0
-        }}
-      >
-        {senderName.charAt(0).toUpperCase()}
-      </Avatar>
-      
-      <Paper
-        elevation={0}
-        sx={{
-          p: 1.5,
-          borderRadius: '8px',
-          bgcolor: isOwn ? '#e3f2fd' : '#f5f5f5',
-          maxWidth: 'calc(100% - 40px)'
-        }}
-      >
-        {!isOwn && (
-          <Typography variant="subtitle2" sx={{ fontSize: '12px', fontWeight: 'medium', mb: 0.5 }}>
-            {senderName}
-          </Typography>
-        )}
-        
-        <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-          {message.content || message.conteudo}
-        </Typography>
-        
-        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', textAlign: 'right', mt: 0.5 }}>
-          {messageTime}
-        </Typography>
-      </Paper>
-    </Box>
-  );
-};
-
-// Componente para exibir mensagem de sistema (usuário entrou/saiu)
-const SystemMessage = ({ message }) => {
-  return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-      <Typography
-        variant="caption"
-        sx={{
-          bgcolor: '#f0f0f0',
-          px: 2,
-          py: 0.5,
-          borderRadius: '12px',
-          color: '#666'
-        }}
-      >
-        {message.content}
-      </Typography>
-    </Box>
-  );
-};
-
-// Componente principal do chat
 const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const { auth } = useContext(AuthContext);
   const [messages, setMessages] = useState([]);
@@ -110,17 +19,85 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState({ open: false, message: '', type: 'info' });
   const messagesEndRef = useRef(null);
-  const isWebSocketEnabled = true; // Pode ser configurado com base em preferências ou environment
+  const pollingIntervalRef = useRef(null);
+  const lastMessageIdRef = useRef(null);
+  const isWebSocketEnabled = true;
 
-  // Função para obter o histórico de mensagens
-  const fetchMessages = async () => {
+  console.log("Usuário atual:", auth.user);
+
+  const isCurrentUserMessage = (message) => {
+    const currentUserId = auth.user?.id;
+    
+    console.log("Verificando mensagem:", {
+      messageId: message.id,
+      senderId: message.senderId,
+      remetenteId: message.remetente?.id,
+      currentUserId: currentUserId,
+      isSame: (message.senderId === currentUserId || message.remetente?.id === currentUserId)
+    });
+    
+    return message.senderId === currentUserId || message.remetente?.id === currentUserId;
+  };
+
+  const getUserColorScheme = (message) => {
+    const isSentByCurrentUser = isCurrentUserMessage(message);
+    
+    if (isSentByCurrentUser) {
+      return {
+        avatar: '#4966f2',  
+        avatarText: 'white',
+        bubble: '#e3f2fd',     
+        bubbleText: '#0d47a1'
+      };
+    } else {
+      const isHelper = message.remetente?.roles?.some(
+        role => role.name === 'HELPER' || role.name === 'ROLE_HELPER'
+      );
+      
+      const isAdmin = message.remetente?.roles?.some(
+        role => role.name === 'ADMIN' || role.name === 'ROLE_ADMIN'
+      );
+      
+      if (isAdmin) {
+        return {
+          avatar: '#d32f2f',
+          avatarText: 'white',
+          bubble: '#ffebee',
+          bubbleText: '#b71c1c'
+        };
+      } else if (isHelper) {
+        return {
+          avatar: '#2e7d32',
+          avatarText: 'white',
+          bubble: '#e8f5e9',
+          bubbleText: '#1b5e20'
+        };
+      } else {
+        return {
+          avatar: '#757575',
+          avatarText: 'white',
+          bubble: '#f5f5f5',
+          bubbleText: '#424242'
+        };
+      }
+    }
+  };
+
+  const fetchMessages = async (silent = false) => {
     try {
-      setIsLoading(true);
-      setError(null);
+      if (!silent) {
+        setIsLoading(true);
+      }
+      
       const data = await chamadoService.getMensagens(chamadoId);
+      console.log("Mensagens recebidas da API:", data);
       
       if (data && Array.isArray(data)) {
-        // Converter mensagens da API para o formato consistente
+        if (data.length > 0) {
+          const lastMessageId = Math.max(...data.map(msg => msg.id));
+          lastMessageIdRef.current = lastMessageId;
+        }
+        
         const formattedMessages = data.map(msg => ({
           id: msg.id,
           type: 'CHAT',
@@ -129,7 +106,6 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
           senderName: msg.remetente?.name || msg.remetente?.username || 'Usuário',
           content: msg.conteudo,
           timestamp: msg.dataEnvio,
-          // Manter as propriedades originais para compatibilidade
           remetente: msg.remetente,
           conteudo: msg.conteudo,
           dataEnvio: msg.dataEnvio
@@ -141,52 +117,52 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       }
     } catch (err) {
       console.error('Erro ao carregar mensagens:', err);
-      setError('Não foi possível carregar as mensagens. Tente novamente.');
+      if (!silent) {
+        setError('Não foi possível carregar as mensagens. Tente novamente.');
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
-  // Função para conectar ao WebSocket
+  const startPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    pollingIntervalRef.current = setInterval(() => {
+      console.log("Executando polling automático...");
+      fetchMessages(true); // Buscar mensagens silenciosamente
+    }, 5000);
+    
+    console.log('Polling de mensagens iniciado (5 segundos)');
+  };
+
   const connectWebSocket = () => {
     if (!isWebSocketEnabled || !chamadoId) return;
     
     setIsConnecting(true);
+    setError(null);
     
-    // Conectar ao WebSocket
     websocketService.connect(
-      // onConnected
       () => {
-        console.log('Conectado ao WebSocket com sucesso');
+        console.log('WebSocket conectado com sucesso');
         
-        // Inscrever no tópico do chamado
         const success = websocketService.subscribeToChamado(chamadoId, (message) => {
           console.log('Mensagem recebida via WebSocket:', message);
           
           if (message.type === 'CHAT') {
-            // Adicionar mensagem de chat à lista
-            setMessages(prev => [...prev, message]);
-          } else if (message.type === 'JOIN') {
-            // Adicionar mensagem de sistema - alguém entrou
-            setMessages(prev => [...prev, message]);
-            setNotification({
-              open: true,
-              message: `${message.senderName} entrou no chat`,
-              type: 'info'
-            });
-          } else if (message.type === 'LEAVE') {
-            // Adicionar mensagem de sistema - alguém saiu
-            setMessages(prev => [...prev, message]);
-            setNotification({
-              open: true,
-              message: `${message.senderName} saiu do chat`,
-              type: 'info'
+            setMessages(prev => {
+              const exists = prev.some(m => m.id === message.id);
+              if (exists) return prev;
+              return [...prev, message];
             });
           }
         });
         
         if (success) {
-          // Notificar que entrou no chat
           websocketService.addUser(chamadoId, {
             type: 'JOIN',
             chamadoId: chamadoId,
@@ -195,60 +171,61 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
             content: '',
             timestamp: new Date().toISOString()
           });
+          
+          setIsConnecting(false);
+          
+          startPolling();
         } else {
-          setNotification({
-            open: true,
-            message: 'Não foi possível se inscrever no chat em tempo real',
-            type: 'warning'
-          });
+          setError('Não foi possível se inscrever no canal do chat');
+          setIsConnecting(false);
+          startPolling();
         }
-        
-        setIsConnecting(false);
       },
-      // onError
       (error) => {
         console.error('Erro na conexão WebSocket:', error);
-        setError('Erro na conexão com o chat em tempo real. Usando modo offline.');
+        setError('Usando modo alternativo para receber mensagens.');
         setIsConnecting(false);
-        // Em caso de erro, usamos apenas o modo REST sem WebSocket
+        startPolling();
       }
     );
   };
 
-  // Carregar mensagens iniciais e configurar WebSocket
   useEffect(() => {
     if (!chamadoId) return;
     
-    // Primeiro carregar o histórico via REST API
+    console.log(`Inicializando chat para chamado #${chamadoId}`);
+    
     fetchMessages();
     
-    // Depois conectar ao WebSocket se estiver habilitado
-    if (isWebSocketEnabled) {
-      connectWebSocket();
-    }
+    connectWebSocket();
+    startPolling();
     
-    // Limpar ao desmontar
     return () => {
-      if (isWebSocketEnabled && websocketService.isConnected) {
+      console.log("Limpando recursos do chat...");
+      
+      if (websocketService.isConnected) {
         websocketService.unsubscribeFromChamado(chamadoId);
+        websocketService.disconnect();
+      }
+      
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
     };
-  }, [chamadoId, auth.user]);
+  }, [chamadoId]);
 
-  // Rolar para a última mensagem quando as mensagens são atualizadas
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
-  // Função para enviar uma mensagem
   const handleSendMessage = async () => {
     if (!messageInput.trim()) return;
     
     setIsSending(true);
     
-    // Criar objeto de mensagem
     const messageObj = {
       type: 'CHAT',
       chamadoId: chamadoId,
@@ -258,28 +235,42 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       timestamp: new Date().toISOString()
     };
     
+    const currentMessage = messageInput;
+    setMessageInput('');
+    
+    const optimisticId = `temp-${Date.now()}`;
+    const optimisticMessage = {
+      ...messageObj,
+      id: optimisticId,
+      _isOptimistic: true
+    };
+    
+    setMessages(prev => [...prev, optimisticMessage]);
+    
     try {
+      let success = false;
+      
       if (isWebSocketEnabled && websocketService.isConnected) {
-        // Enviar via WebSocket se conectado
-        const success = websocketService.sendMessage(chamadoId, messageObj);
-        
-        if (!success) {
-          // Se falhar o WebSocket, usar REST API como fallback
-          await chamadoService.enviarMensagem(chamadoId, { conteudo: messageInput });
-          // Recarregar mensagens para mostrar a nova mensagem
-          fetchMessages();
-        }
-      } else {
-        // Usar REST API se WebSocket não estiver habilitado ou conectado
-        await chamadoService.enviarMensagem(chamadoId, { conteudo: messageInput });
-        // Recarregar mensagens para mostrar a nova mensagem
-        fetchMessages();
+        success = websocketService.sendMessage(chamadoId, messageObj);
       }
       
-      // Limpar o input após enviar
-      setMessageInput('');
+      if (!success) {
+        console.log("Enviando mensagem via API REST:", { conteudo: currentMessage });
+        const response = await chamadoService.enviarMensagem(chamadoId, { conteudo: currentMessage });
+        
+        console.log("Resposta ao enviar mensagem:", response);
+        
+        setMessages(prev => prev.filter(m => m.id !== optimisticId));
+        
+        fetchMessages(true);
+      }
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      
+      setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
+      
+      setMessageInput(currentMessage);
+      
       setNotification({
         open: true,
         message: 'Não foi possível enviar a mensagem. Tente novamente.',
@@ -301,7 +292,39 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     setNotification(prev => ({ ...prev, open: false }));
   };
 
+  const handleRefreshMessages = () => {
+    fetchMessages();
+
+    if (!websocketService.isConnected) {
+      connectWebSocket();
+    }
+  };
+
   const isChatDisabled = chamadoStatus !== 'EM_ATENDIMENTO';
+  
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getInitial = (name) => {
+    return name?.charAt(0)?.toUpperCase() || 'U';
+  };
+
+  const getUserRole = (message) => {
+    if (!message.remetente || !message.remetente.roles) return null;
+    
+    const roles = message.remetente.roles;
+    
+    if (roles.some(role => role.name === 'ADMIN' || role.name === 'ROLE_ADMIN')) {
+      return "Admin";
+    } else if (roles.some(role => role.name === 'HELPER' || role.name === 'ROLE_HELPER')) {
+      return "Helper";
+    }
+    
+    return null;
+  };
 
   return (
     <Paper
@@ -317,165 +340,258 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       }}
     >
       {/* Header */}
-      <Box
-        sx={{
-          p: 2,
+      <Box 
+        sx={{ 
+          p: 2, 
+          bgcolor: '#f5f5f5', 
           borderBottom: '1px solid #e0e0e0',
-          bgcolor: '#f9f9f9',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
         }}
       >
         <Typography variant="subtitle1" fontWeight="medium">
-          Conversa
-          {isWebSocketEnabled && websocketService.isConnected && (
-            <Box
-              component="span"
-              sx={{
-                display: 'inline-block',
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                bgcolor: '#4CAF50',
-                ml: 1
-              }}
-            />
-          )}
+          Chat do Chamado #{chamadoId}
         </Typography>
         
-        <Tooltip title="Atualizar conversa">
-          <IconButton size="small" onClick={fetchMessages} disabled={isLoading}>
-            <RefreshIcon fontSize="small" />
+        <Tooltip title="Atualizar mensagens">
+          <IconButton 
+            size="small" 
+            onClick={handleRefreshMessages}
+            disabled={isConnecting}
+          >
+            {isConnecting ? <CircularProgress size={20} /> : <RefreshIcon />}
           </IconButton>
         </Tooltip>
       </Box>
-
-      {/* Messages Area */}
-      <Box
-        sx={{
-          p: 2,
-          flexGrow: 1,
+      
+      {/* Error message */}
+      {error && (
+        <Alert severity="info" sx={{ m: 1 }}>
+          {error}
+        </Alert>
+      )}
+      
+      {/* Messages area */}
+      <Box 
+        sx={{ 
+          flexGrow: 1, 
           overflowY: 'auto',
+          p: 2,
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          gap: 1,
+          bgcolor: '#fafafa'
         }}
       >
         {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <CircularProgress size={30} sx={{ color: '#4966f2' }} />
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
           </Box>
-        ) : error ? (
-          <Box sx={{ p: 2, textAlign: 'center' }}>
-            <Typography color="error">{error}</Typography>
-            <Button 
-              size="small" 
-              onClick={fetchMessages} 
-              sx={{ mt: 1, color: '#4966f2' }}
-            >
-              Tentar novamente
-            </Button>
-          </Box>
-        ) : messages.length === 0 ? (
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'center',
+        ) : messages.length > 0 ? (
+          <>
+            {messages.map((message, index) => {
+              const isSentByCurrentUser = isCurrentUserMessage(message);
+              
+              const colorScheme = getUserColorScheme(message);
+              
+              const userRole = getUserRole(message);
+
+              return (
+                <Box 
+                  key={index}
+                  sx={{ 
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: isSentByCurrentUser ? 'flex-end' : 'flex-start',
+                    mb: 1,
+                    width: '100%'
+                  }}
+                >
+                  <Box 
+                    sx={{ 
+                      display: 'flex',
+                      flexDirection: isSentByCurrentUser ? 'row-reverse' : 'row',
+                      alignItems: 'flex-end',
+                      gap: 1,
+                      maxWidth: '80%'
+                    }}
+                  >
+                    <Avatar 
+                      sx={{ 
+                        width: 32, 
+                        height: 32,
+                        bgcolor: colorScheme.avatar,
+                        color: colorScheme.avatarText,
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      {getInitial(message.senderName)}
+                    </Avatar>
+                    
+                    <Box 
+                      sx={{ 
+                        p: 1.5,
+                        bgcolor: colorScheme.bubble,
+                        color: colorScheme.bubbleText,
+                        borderRadius: '8px',
+                        position: 'relative',
+                        opacity: message._isOptimistic ? 0.7 : 1,
+                        maxWidth: '100%',
+                        wordBreak: 'break-word',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        mb: 0.5
+                      }}>
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            fontWeight: 'medium',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5
+                          }}
+                        >
+                          {message.senderName}
+                          {userRole && (
+                            <Box 
+                              component="span" 
+                              sx={{ 
+                                bgcolor: userRole === 'Admin' ? '#d32f2f' : '#2e7d32',
+                                color: 'white',
+                                fontSize: '0.6rem',
+                                px: 0.5,
+                                py: 0.2,
+                                borderRadius: '4px',
+                                ml: 0.5
+                              }}
+                            >
+                              {userRole}
+                            </Box>
+                          )}
+                        </Typography>
+                      </Box>
+                      
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {message.content || message.conteudo}
+                      </Typography>
+                      
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          display: 'block',
+                          textAlign: 'right',
+                          color: 'text.secondary',
+                          mt: 0.5
+                        }}
+                      >
+                        {formatTime(message.timestamp || message.dataEnvio)}
+                        {message._isOptimistic && ' (enviando...)'}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </>
+        ) : (
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
               alignItems: 'center',
-              height: '100%',
-              color: '#999'
+              height: '100%'
             }}
           >
-            <Typography variant="body2">
+            <Typography color="text.secondary">
               Nenhuma mensagem ainda. Inicie a conversa!
             </Typography>
-          </Box>
-        ) : (
-          messages.map((message, index) => {
-            if (message.type === 'JOIN' || message.type === 'LEAVE') {
-              return <SystemMessage key={index} message={message} />;
-            } else {
-              const isOwn = 
-                (message.senderId === auth.user?.id) || 
-                (message.remetente?.id === auth.user?.id);
-              
-              return <ChatMessage key={index} message={message} isOwn={isOwn} />;
-            }
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </Box>
-
-      {/* Input Area */}
-      <Box
-        sx={{
-          p: 2,
-          borderTop: '1px solid #e0e0e0',
-          bgcolor: '#f9f9f9'
-        }}
-      >
-        {isChatDisabled ? (
-          <Box sx={{ p: 1, textAlign: 'center' }}>
-            <Typography variant="body2" color="textSecondary">
-              O chat está disponível apenas para chamados em atendimento.
-            </Typography>
-          </Box>
-        ) : isConnecting ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
-            <CircularProgress size={24} sx={{ color: '#4966f2', mr: 1 }} />
-            <Typography variant="body2">Conectando ao chat...</Typography>
-          </Box>
-        ) : (
-          <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-            <TextField
-              fullWidth
-              placeholder="Digite sua mensagem..."
-              multiline
-              maxRows={4}
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              variant="outlined"
-              size="small"
-              disabled={isSending}
-              sx={{
-                '.MuiOutlinedInput-root': {
-                  bgcolor: 'white',
-                  borderRadius: '4px'
-                }
-              }}
-            />
-            
-            <Button
-              variant="contained"
-              endIcon={<SendIcon />}
-              disabled={!messageInput.trim() || isSending}
-              onClick={handleSendMessage}
-              sx={{
-                ml: 1,
-                bgcolor: '#4966f2',
-                color: 'white',
-                '&:hover': {
-                  bgcolor: '#3a51d6'
-                }
-              }}
-            >
-              {isSending ? 'Enviando...' : 'Enviar'}
-            </Button>
           </Box>
         )}
       </Box>
       
-      {/* Notificações */}
+      {/* Input area */}
+      <Box 
+        sx={{ 
+          p: 2, 
+          borderTop: '1px solid #e0e0e0',
+          bgcolor: '#f5f5f5'
+        }}
+      >
+        <Box 
+          sx={{ 
+            display: 'flex',
+            gap: 1
+          }}
+        >
+          <TextField
+            fullWidth
+            multiline
+            maxRows={3}
+            placeholder={isChatDisabled 
+              ? "Chat disponível apenas para chamados em atendimento" 
+              : "Digite sua mensagem..."}
+            value={messageInput}
+            onChange={(e) => setMessageInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isChatDisabled || isSending}
+            variant="outlined"
+            size="small"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: 'white',
+                borderRadius: '4px'
+              }
+            }}
+          />
+          
+          <Button
+            variant="contained"
+            color="primary"
+            endIcon={isSending ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
+            onClick={handleSendMessage}
+            disabled={isChatDisabled || !messageInput.trim() || isSending}
+            sx={{ 
+              borderRadius: '4px',
+              textTransform: 'none',
+              minWidth: '100px'
+            }}
+          >
+            {isSending ? 'Enviando' : 'Enviar'}
+          </Button>
+        </Box>
+        
+        {isChatDisabled && (
+          <Typography 
+            variant="caption" 
+            color="error" 
+            sx={{ 
+              display: 'block',
+              mt: 1
+            }}
+          >
+            O chat só está disponível para chamados em atendimento
+          </Typography>
+        )}
+      </Box>
+      
+      {/* Notification */}
       <Snackbar
         open={notification.open}
-        autoHideDuration={5000}
+        autoHideDuration={4000}
         onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert 
           onClose={handleCloseNotification} 
-          severity={notification.type} 
+          severity={notification.type}
+          variant="filled"
           sx={{ width: '100%' }}
         >
           {notification.message}

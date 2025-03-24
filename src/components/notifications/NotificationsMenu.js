@@ -13,7 +13,6 @@ const NotificationsMenu = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   
-  // Simular algumas notificações
   useEffect(() => {
     setNotifications([
       {
@@ -38,8 +37,7 @@ const NotificationsMenu = () => {
   const handleOpenMenu = (event) => {
     setAnchorEl(event.currentTarget);
     setLoading(true);
-    
-    // Simular carregamento
+
     setTimeout(() => {
       setLoading(false);
     }, 800);
@@ -50,12 +48,10 @@ const NotificationsMenu = () => {
   };
   
   const handleNotificationClick = (notification) => {
-    // Marcar como lida
     setNotifications(prev => 
       prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
     );
     
-    // Navegar para o chamado se aplicável
     if (notification.chamadoId) {
       navigate(`/chamados/${notification.chamadoId}`);
     }
@@ -68,7 +64,6 @@ const NotificationsMenu = () => {
     handleCloseMenu();
   };
   
-  // Formatar data relativa
   const formatRelativeTime = (timestamp) => {
     const date = new Date(timestamp);
     const now = new Date();

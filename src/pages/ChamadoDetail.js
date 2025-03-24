@@ -1,47 +1,23 @@
 // src/pages/ChamadoDetail.js
 import React, { useEffect, useState, useContext } from 'react';
 import {
-  Box, Typography, Paper, Button, Grid, Chip, TextField,
-  CircularProgress, Alert, Radio, RadioGroup, FormControlLabel,
-  Divider, Card, CardContent, FormControl, Tabs, Tab, Snackbar
+  Box, Typography, Paper, Button, Grid, Chip, 
+  CircularProgress, Alert, Divider, Snackbar
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { chamadoService } from '../api/chamadoService';
 import ChatComponent from '../components/chat/ChatComponent';
 import AuthContext from '../context/AuthContext';
 
-function TabPanel(props) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 2 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
-
 function ChamadoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { auth } = useContext(AuthContext);
   const [chamado, setChamado] = useState(null);
-  const [mensagem, setMensagem] = useState('');
-  const [mensagens, setMensagens] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [actionInProgress, setActionInProgress] = useState(false);
   const [selectedHelper, setSelectedHelper] = useState('');
-  const [tabValue, setTabValue] = useState(0);
   const [notification, setNotification] = useState({
     open: false,
     message: '',
@@ -50,7 +26,6 @@ function ChamadoDetail() {
 
   useEffect(() => {
     fetchChamado();
-    fetchMensagens();
   }, [id]);
 
   const fetchChamado = async () => {
@@ -72,55 +47,27 @@ function ChamadoDetail() {
     }
   };
 
-  const fetchMensagens = async () => {
-    try {
-      console.log('Buscando mensagens do chamado ID:', id);
-      const data = await chamadoService.getMensagens(id);
-      console.log('Mensagens recebidas:', data);
-      setMensagens(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar mensagens:', error);
-      // Não exibimos erro aqui para não atrapalhar a visualização do chamado
-    }
-  };
-
-  const handleEnviarMensagem = async () => {
-    if (!mensagem.trim()) return;
-
-    try {
-      setSending(true);
-      const payload = { conteudo: mensagem };
-      console.log('Enviando mensagem:', payload);
-      await chamadoService.enviarMensagem(id, payload);
-      setMensagem('');
-      await fetchMensagens(); // Recarrega as mensagens após enviar
-      setNotification({
-        open: true,
-        message: 'Mensagem enviada com sucesso!',
-        severity: 'success'
-      });
-    } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      setNotification({
-        open: true,
-        message: 'Não foi possível enviar a mensagem. Tente novamente.',
-        severity: 'error'
-      });
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleHelperChange = (event) => {
-    setSelectedHelper(event.target.value);
-  };
-
+  // Function to adhere to a chamado - UPDATED
   const handleAderir = async () => {
     try {
       setActionInProgress(true);
       console.log('Tentando aderir ao chamado:', id);
+      console.log('Status atual do chamado antes de aderir:', chamado.status);
+      
+      // Check if chamado is in the correct state
+      if (chamado.status !== 'ABERTO') {
+        setNotification({
+          open: true,
+          message: `Não é possível aderir a um chamado com status ${chamado.status}`,
+          severity: 'warning'
+        });
+        setActionInProgress(false);
+        return;
+      }
+      
       await chamadoService.aderirChamado(id);
       await fetchChamado(); // Recarrega o chamado após aderir
+      
       setNotification({
         open: true,
         message: 'Você aderiu ao chamado com sucesso!',
@@ -128,9 +75,14 @@ function ChamadoDetail() {
       });
     } catch (error) {
       console.error('Erro ao aderir ao chamado:', error);
+      
+      // Extract the error message from the response if available
+      const errorMessage = error.response?.data?.message || 
+                          'Não foi possível aderir ao chamado. Verifique se o status está correto.';
+      
       setNotification({
         open: true,
-        message: 'Não foi possível aderir ao chamado. Tente novamente.',
+        message: errorMessage,
         severity: 'error'
       });
     } finally {
@@ -159,10 +111,6 @@ function ChamadoDetail() {
     } finally {
       setActionInProgress(false);
     }
-  };
-
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
   };
 
   const handleCloseNotification = () => {
@@ -301,85 +249,10 @@ function ChamadoDetail() {
             <Divider sx={{ my: 3 }} />
 
             <Box sx={{ width: '100%', mb: 3 }}>
-              <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <Tabs value={tabValue} onChange={handleTabChange}>
-                  <Tab label="Mensagens" />
-                  <Tab label="Chat em Tempo Real" />
-                </Tabs>
-              </Box>
-              
-              <TabPanel value={tabValue} index={0}>
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    Mensagens
-                  </Typography>
-
-                  {mensagens.length > 0 ? (
-                    mensagens.map((msg, index) => (
-                      <Card key={index} variant="outlined" sx={{ mb: 2, borderRadius: '8px' }}>
-                        <CardContent>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="subtitle2">
-                              {msg.remetente?.name || msg.remetente?.username || 'Usuário'}
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary">
-                              {formatDate(msg.dataEnvio)}
-                            </Typography>
-                          </Box>
-                          <Typography variant="body2">
-                            {msg.conteudo}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    ))
-                  ) : (
-                    <Box sx={{ p: 3, bgcolor: '#f9f9f9', borderRadius: '4px', textAlign: 'center' }}>
-                      <Typography color="textSecondary">
-                        Nenhuma mensagem ainda. Inicie a conversa!
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-
-                <Box sx={{ mt: 3 }}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={4}
-                    placeholder="Digite sua mensagem aqui..."
-                    value={mensagem}
-                    onChange={(e) => setMensagem(e.target.value)}
-                    variant="outlined"
-                    sx={{ 
-                      '.MuiOutlinedInput-root': {
-                        bgcolor: 'white',
-                        borderRadius: '4px'
-                      },
-                      mb: 2
-                    }}
-                    disabled={chamado.status === 'FECHADO' || sending}
-                  />
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <Button
-                      variant="contained"
-                      onClick={handleEnviarMensagem}
-                      disabled={sending || !mensagem.trim() || chamado.status === 'FECHADO'}
-                      sx={{ 
-                        bgcolor: '#4966f2',
-                        borderRadius: '4px',
-                        textTransform: 'none'
-                      }}
-                    >
-                      {sending ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Enviar'}
-                    </Button>
-                  </Box>
-                </Box>
-              </TabPanel>
-              
-              <TabPanel value={tabValue} index={1}>
-                {/* Componente do Chat em Tempo Real */}
-                <ChatComponent chamadoId={parseInt(id)} chamadoStatus={chamado.status} />
-              </TabPanel>
+              <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                Chat
+              </Typography>
+              <ChatComponent chamadoId={parseInt(id)} chamadoStatus={chamado.status} />
             </Box>
           </Grid>
 
