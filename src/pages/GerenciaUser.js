@@ -1,20 +1,22 @@
-// src/pages/GerenciaUser.js
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Paper, Button, TextField, MenuItem, Select,
   FormControl, InputLabel, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Tabs, Tab, Snackbar, Alert, CircularProgress,
   Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  IconButton, Tooltip
+  IconButton, Tooltip, InputAdornment
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import EditIcon from '@mui/icons-material/Edit';
+import SearchIcon from '@mui/icons-material/Search';
 import userService from '../api/userService';
+import UserEditForm from '../components/user/UserEditForm';
 
-// Define validation functions directly in this component
+// Funções de validação
 const validateRequired = (value, fieldName) => {
   if (!value || (typeof value === 'string' && !value.trim())) {
     return `${fieldName} é obrigatório`;
@@ -46,14 +48,52 @@ const validatePassword = (value) => {
   return errors.join('. ');
 };
 
+// Componente auxiliar para os painéis das abas - DEFINIDO ANTES DE SER USADO
+const TabPanel = (props) => {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`tabpanel-${index}`}
+      {...other}
+      style={{ padding: '16px 0' }}
+    >
+      {value === index && (
+        <Box>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+};
+
 // Componente para listar usuários
 const UsersList = ({ users, onRefresh }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [openStatusDialog, setOpenStatusDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredUsers, setFilteredUsers] = useState([]);
+
+  useEffect(() => {
+    // Filtrar usuários com base na consulta de pesquisa
+    if (!searchQuery) {
+      setFilteredUsers(users);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = users.filter(user => 
+        user.username.toLowerCase().includes(query) || 
+        (user.name && user.name.toLowerCase().includes(query))
+      );
+      setFilteredUsers(filtered);
+    }
+  }, [searchQuery, users]);
 
   const getRoleColor = (role) => {
     if (role.includes('ADMIN')) {
@@ -77,12 +117,21 @@ const UsersList = ({ users, onRefresh }) => {
     setOpenStatusDialog(true);
   };
 
+  const handleOpenEditDialog = (user) => {
+    setSelectedUser(user);
+    setOpenEditDialog(true);
+  };
+
   const handleCloseDeleteDialog = () => {
     setOpenDeleteDialog(false);
   };
 
   const handleCloseStatusDialog = () => {
     setOpenStatusDialog(false);
+  };
+
+  const handleCloseEditDialog = () => {
+    setOpenEditDialog(false);
   };
 
   const handleDeleteUser = async () => {
@@ -121,9 +170,33 @@ const UsersList = ({ users, onRefresh }) => {
     }
   };
 
+  const handleEditSuccess = () => {
+    setSuccessMessage(`Usuário ${selectedUser.username} atualizado com sucesso!`);
+    onRefresh();
+  };
+
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+  };
+
   return (
     <>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <TextField
+          placeholder="Buscar usuário..."
+          variant="outlined"
+          size="small"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          sx={{ width: '300px' }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+        />
         <Tooltip title="Atualizar lista">
           <IconButton onClick={onRefresh} color="primary">
             <RefreshIcon />
@@ -144,8 +217,8 @@ const UsersList = ({ users, onRefresh }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {users.length > 0 ? (
-              users.map((user) => (
+            {filteredUsers.length > 0 ? (
+              filteredUsers.map((user) => (
                 <TableRow key={user.id} hover>
                   <TableCell>#{user.id}</TableCell>
                   <TableCell>{user.username}</TableCell>
@@ -178,26 +251,39 @@ const UsersList = ({ users, onRefresh }) => {
                     />
                   </TableCell>
                   <TableCell>
-                    <Tooltip title={user.enabled ? "Desativar usuário" : "Ativar usuário"}>
-                      <IconButton 
-                        size="small" 
-                        color={user.enabled ? "warning" : "success"}
-                        onClick={() => handleOpenStatusDialog(user)}
-                        sx={{ mr: 1 }}
-                      >
-                        {user.enabled ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
-                      </IconButton>
-                    </Tooltip>
-                    
-                    <Tooltip title="Excluir usuário">
-                      <IconButton 
-                        size="small" 
-                        color="error"
-                        onClick={() => handleOpenDeleteDialog(user)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <Box sx={{ display: 'flex' }}>
+                      <Tooltip title="Editar usuário">
+                        <IconButton 
+                          size="small" 
+                          color="primary"
+                          onClick={() => handleOpenEditDialog(user)}
+                          sx={{ mr: 1 }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      
+                      <Tooltip title={user.enabled ? "Desativar usuário" : "Ativar usuário"}>
+                        <IconButton 
+                          size="small" 
+                          color={user.enabled ? "warning" : "success"}
+                          onClick={() => handleOpenStatusDialog(user)}
+                          sx={{ mr: 1 }}
+                        >
+                          {user.enabled ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+                        </IconButton>
+                      </Tooltip>
+                      
+                      <Tooltip title="Excluir usuário">
+                        <IconButton 
+                          size="small" 
+                          color="error"
+                          onClick={() => handleOpenDeleteDialog(user)}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))
@@ -213,6 +299,14 @@ const UsersList = ({ users, onRefresh }) => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Diálogo de edição do usuário */}
+      <UserEditForm 
+        open={openEditDialog}
+        onClose={handleCloseEditDialog}
+        user={selectedUser}
+        onSuccess={handleEditSuccess}
+      />
 
       {/* Diálogo de confirmação para excluir usuário */}
       <Dialog
@@ -297,7 +391,6 @@ const UserForm = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  // Add fieldErrors state
   const [fieldErrors, setFieldErrors] = useState({});
 
   const handleChange = (e) => {
@@ -333,6 +426,8 @@ const UserForm = () => {
     const passwordError = validateRequired(formData.password, 'Senha') || 
                           validatePassword(formData.password);
     if (passwordError) validationErrors.password = passwordError;
+    
+    // If there
     
     // If there are validation errors, show them and stop submission
     if (Object.keys(validationErrors).length > 0) {
@@ -547,27 +642,6 @@ function GerenciaUser() {
         </Box>
       </Paper>
     </Box>
-  );
-}
-
-// Componente auxiliar para os painéis das abas
-function TabPanel(props) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      {...other}
-      style={{ padding: '16px 0' }}
-    >
-      {value === index && (
-        <Box>
-          {children}
-        </Box>
-      )}
-    </div>
   );
 }
 

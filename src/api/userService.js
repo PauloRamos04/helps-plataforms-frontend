@@ -28,8 +28,20 @@ export const userService = {
       const response = await api.post('/admin/users', userData);
       return response.data;
     } catch (error) {
-        console.error('Resposta de erro completa:', error.response?.data);
       console.error('Erro ao criar usuário:', error);
+      console.error('Resposta de erro:', error.response?.data);
+      throw error;
+    }
+  },
+  
+  updateUser: async (id, userData) => {
+    try {
+      console.log('Enviando dados para atualizar usuário:', userData);
+      
+      const response = await api.put(`/admin/users/${id}`, userData);
+      return response.data;
+    } catch (error) {
+      console.error(`Erro ao atualizar usuário ${id}:`, error);
       console.error('Resposta de erro:', error.response?.data);
       throw error;
     }

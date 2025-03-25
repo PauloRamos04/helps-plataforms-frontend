@@ -1,36 +1,122 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { 
   Box, Typography, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Button,
-  Alert, CircularProgress, IconButton, Tooltip
+  Alert, CircularProgress, IconButton, Tooltip,
+  TextField, InputAdornment, FormControl, InputLabel, 
+  Select, MenuItem, Grid
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { chamadoService } from '../api/chamadoService';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import SearchIcon from '@mui/icons-material/Search';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import AuthContext from '../context/AuthContext';
 
 function SolicitacoesList() {
   const [chamados, setChamados] = useState([]);
+  const [filteredChamados, setFilteredChamados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const { auth } = useContext(AuthContext);
+  
+  // Estados para filtros
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoriaFilter, setCategoriaFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Lista de categorias disponíveis
+  const categorias = ['SUPORTE', 'FINANCEIRO', 'TÉCNICO'];
 
   useEffect(() => {
     fetchChamados();
   }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [chamados, searchQuery, statusFilter, categoriaFilter]);
 
   const fetchChamados = async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await chamadoService.getChamados();
-      setChamados(data);
+      
+      // Filtra os chamados para mostrar apenas os criados pelo usuário atual
+      // a menos que seja um ADMIN ou HELPER
+      const isAdminOrHelper = auth.user?.roles?.some(role => 
+        role === 'ADMIN' || 
+        role === 'HELPER' || 
+        role === 'ROLE_ADMIN' || 
+        role === 'ROLE_HELPER'
+      );
+      
+      let filteredData = data;
+      if (!isAdminOrHelper) {
+        filteredData = data.filter(chamado => 
+          chamado.usuario?.id === parseInt(auth.user?.id)
+        );
+      }
+      
+      setChamados(filteredData);
     } catch (error) {
       console.error('Erro ao carregar chamados:', error);
       setError('Não foi possível carregar as solicitações. Por favor, tente novamente.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyFilters = () => {
+    let filtered = [...chamados];
+    
+    // Aplicar filtro de pesquisa
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(chamado => 
+        (chamado.titulo && chamado.titulo.toLowerCase().includes(query)) ||
+        (chamado.descricao && chamado.descricao.toLowerCase().includes(query)) ||
+        (chamado.categoria && chamado.categoria.toLowerCase().includes(query)) ||
+        (chamado.id && chamado.id.toString().includes(query))
+      );
+    }
+    
+    // Aplicar filtro de status
+    if (statusFilter) {
+      filtered = filtered.filter(chamado => chamado.status === statusFilter);
+    }
+    
+    // Aplicar filtro de categoria
+    if (categoriaFilter) {
+      filtered = filtered.filter(chamado => chamado.categoria === categoriaFilter);
+    }
+    
+    setFilteredChamados(filtered);
+  };
+
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+  };
+
+  const handleStatusFilterChange = (e) => {
+    setStatusFilter(e.target.value);
+  };
+
+  const handleCategoriaFilterChange = (e) => {
+    setCategoriaFilter(e.target.value);
+  };
+
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('');
+    setCategoriaFilter('');
+  };
+
+  const toggleShowFilters = () => {
+    setShowFilters(!showFilters);
   };
 
   const formatDate = (dateString) => {
@@ -88,6 +174,20 @@ function SolicitacoesList() {
           </Typography>
           
           <Box>
+            <Button
+              startIcon={<FilterListIcon />}
+              onClick={toggleShowFilters}
+              variant="outlined"
+              size="small"
+              sx={{ 
+                borderColor: '#e0e0e0',
+                color: '#666',
+                mr: 1
+              }}
+            >
+              {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+            </Button>
+            
             <Tooltip title="Atualizar">
               <IconButton 
                 onClick={fetchChamados} 
@@ -113,6 +213,78 @@ function SolicitacoesList() {
           </Box>
         </Box>
         
+        {/* Filtros avançados */}
+        {showFilters && (
+          <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: '4px' }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  placeholder="Buscar por título, descrição, ID..."
+                  variant="outlined"
+                  size="small"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="status-filter-label">Status</InputLabel>
+                  <Select
+                    labelId="status-filter-label"
+                    value={statusFilter}
+                    label="Status"
+                    onChange={handleStatusFilterChange}
+                  >
+                    <MenuItem value="">Todos</MenuItem>
+                    <MenuItem value="ABERTO">ABERTO</MenuItem>
+                    <MenuItem value="EM_ATENDIMENTO">EM ATENDIMENTO</MenuItem>
+                    <MenuItem value="FECHADO">FECHADO</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="categoria-filter-label">Categoria</InputLabel>
+                  <Select
+                    labelId="categoria-filter-label"
+                    value={categoriaFilter}
+                    label="Categoria"
+                    onChange={handleCategoriaFilterChange}
+                  >
+                    <MenuItem value="">Todas</MenuItem>
+                    {categorias.map((categoria) => (
+                      <MenuItem key={categoria} value={categoria}>
+                        {categoria}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} sm={2}>
+                <Button
+                  variant="outlined"
+                  onClick={handleClearFilters}
+                  fullWidth
+                  sx={{ borderColor: '#e0e0e0', color: '#666' }}
+                >
+                  Limpar Filtros
+                </Button>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
+        
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
@@ -137,8 +309,8 @@ function SolicitacoesList() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {chamados.length > 0 ? (
-                  chamados.map((chamado) => (
+                {filteredChamados.length > 0 ? (
+                  filteredChamados.map((chamado) => (
                     <TableRow 
                       key={chamado.id}
                       sx={{ 
