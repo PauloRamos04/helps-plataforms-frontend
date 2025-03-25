@@ -1,4 +1,3 @@
-// src/components/common/Layout.js
 import React, { useContext } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -79,7 +78,7 @@ function Layout() {
   const location = useLocation();
   
   const isAdmin = auth?.user?.roles?.includes('ADMIN') || 
-                  auth?.roles?.includes('ADMIN');
+                  auth?.user?.roles?.includes('ROLE_ADMIN');
 
   const getUserName = () => {
     return auth?.user?.name || 

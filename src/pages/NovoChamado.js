@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { 
   Box, Typography, TextField, Button, Paper, 
   FormControl, InputLabel, Select, MenuItem,
@@ -6,15 +6,21 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { chamadoService } from '../api/chamadoService';
+import AuthContext from '../context/AuthContext';
+import NotificationsContext from '../context/NotificationsContext';
+import notificationsManager from '../utils/notificationsManager';
 
 function NovoChamado() {
   const navigate = useNavigate();
+  const { auth } = useContext(AuthContext);
+  const notificationsContext = useContext(NotificationsContext);
+  
   const [formData, setFormData] = useState({
     setor: 'SAC',
     tipoSolicitacao: 'CLIENTE SEM ACESSO A SVA',
     responsavel: 'HELPER 1',
-    categoria: 'SUPORTE', // Adicionando categoria
-    tipo: 'NORMAL', // Adicionando tipo
+    categoria: 'SUPORTE',
+    tipo: 'NORMAL',
     descricao: ''
   });
   const [loading, setLoading] = useState(false);
@@ -35,15 +41,43 @@ function NovoChamado() {
     setError(null);
     
     try {
-      await chamadoService.createChamado({
+      // Enviar chamado para o backend
+      const response = await chamadoService.createChamado({
         titulo: formData.tipoSolicitacao,
         descricao: formData.descricao,
         setor: formData.setor,
         responsavel: formData.responsavel,
-        categoria: formData.categoria, // Incluindo categoria na requisição
-        tipo: formData.tipo // Incluindo tipo na requisição
+        categoria: formData.categoria,
+        tipo: formData.tipo
       });
+      
+      // Mostrar mensagem de sucesso
       setOpenSnackbar(true);
+      
+      // Criar notificação usando o gerenciador
+      notificationsManager.createChamadoNotification(
+        response.id || 1, 
+        formData.tipoSolicitacao,
+        formData.tipo,
+        formData.categoria
+      );
+      
+      // Também tentar adicionar a notificação pelo contexto
+      if (notificationsContext && typeof notificationsContext.addNotification === 'function') {
+        notificationsContext.addNotification({
+          message: `Novo chamado criado: ${formData.tipoSolicitacao}`,
+          type: 'NOVO_CHAMADO',
+          read: false,
+          chamadoId: response.id || 1,
+          createdAt: new Date().toISOString(),
+          categoria: formData.categoria,
+          prioridade: formData.tipo
+        });
+      } else {
+        console.warn("Função addNotification não disponível no contexto de notificações");
+      }
+      
+      // Redirecionar após um breve atraso
       setTimeout(() => {
         navigate('/chamados');
       }, 1500);

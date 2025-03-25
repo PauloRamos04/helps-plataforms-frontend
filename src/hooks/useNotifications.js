@@ -57,40 +57,44 @@ const useNotifications = () => {
 
     useEffect(() => {
         if (!auth.isAuthenticated) return;
-
-        loadNotifications();
-
+    
+        // Configuração inicial do WebSocket
         const setupNotificationListener = () => {
-            if (!websocketService.isConnected) {
-                websocketService.connect(
-                    () => {
-                        const username = auth.user?.username;
-                        
-                        if (username) {
-                            websocketService.subscribeToNotifications(
-                                auth.user?.id,
-                                username,
-                                (notification) => {
-                                    setNotifications(prev => [notification, ...prev]);
-                                    setUnreadCount(prev => prev + 1);
-                                }
-                            );
-                        }
-                    },
-                    (error) => {
-                        // Silenciar erros para experiência do usuário
+            // Se já estiver conectado, não reconecta
+            if (websocketService.isConnected) return;
+    
+            websocketService.connect(
+                () => {
+                    const username = auth.user?.username;
+                    
+                    if (username) {
+                        websocketService.subscribeToNotifications(
+                            auth.user?.id,
+                            username,
+                            (notification) => {
+                                setNotifications(prev => [notification, ...prev]);
+                                setUnreadCount(prev => prev + 1);
+                            }
+                        );
                     }
-                );
-            }
+                },
+                (error) => {
+                    console.error('Erro na configuração do WebSocket:', error);
+                    // Fallback para polling
+                    loadNotifications();
+                }
+            );
         };
-
+    
         setupNotificationListener();
-
+    
         // Polling como fallback
         const interval = setInterval(loadNotifications, 30000);
         
         return () => {
             clearInterval(interval);
+            // Opcional: desconectar o WebSocket
+            websocketService.disconnect();
         };
     }, [auth.isAuthenticated, auth.user]);
 

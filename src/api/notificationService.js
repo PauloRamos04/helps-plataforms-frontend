@@ -6,6 +6,8 @@ export const notificationService = {
       const response = await api.get('/notifications/unread');
       return response.data;
     } catch (error) {
+      console.error('Erro completo de notificações:', error);
+      console.error('Detalhes da resposta:', error.response?.data);
       throw error;
     }
   },
