@@ -14,69 +14,54 @@ class NotificationWebSocketService {
 
   connect(onConnected, onError) {
     try {
-      // Cancela tentativas anteriores de reconexão
       if (this.reconnectTimeout) {
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = null;
       }
       
-      // Verifica se há token de autenticação
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('Sem token de autenticação para WebSocket de notificações');
         if (onError) onError(new Error('Falha na autenticação para conexão WebSocket de notificações'));
         return;
       }
       
-      // URL do WebSocket - Use a mesma origem que a página atual para evitar problemas de segurança
-      const apiUrl = process.env.REACT_APP_API_URL || window.location.origin;
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8080';
       const socketUrl = `${apiUrl}/ws`;
       
-      console.log(`Connecting to WebSocket at: ${socketUrl}`);
-      
-      // Configurações robustas de socket
       const socket = new SockJS(socketUrl, null, {
         transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
         timeout: 5000
       });
       
-      // Configurações do STOMP
       this.stompClient = webstomp.over(socket, {
         debug: false,
         heartbeat: { outgoing: 20000, incoming: 20000 }
       });
       
-      // Opções de conexão com token
       const connectHeaders = { 
         'Authorization': `Bearer ${token}`,
         'accept-version': '1.1,1.0',
         'heart-beat': '10000,10000'
       };
       
-      // Tenta conectar
       this.stompClient.connect(
         connectHeaders,
         (frame) => {
-          console.log('WebSocket de notificações conectado:', frame);
           this.isConnected = true;
           this.reconnectAttempts = 0;
           
           if (onConnected) onConnected();
         },
         (error) => {
-          console.error('Erro na conexão WebSocket de notificações:', error);
           this.isConnected = false;
           
           if (onError) onError(error);
           
-          // Agenda reconexão
           this._scheduleReconnection(onConnected, onError);
         }
       );
       
-      // Tratamento de fechamento da conexão
       socket.onclose = (event) => {
-        console.warn('WebSocket de notificações fechado:', event);
         this.isConnected = false;
         
         if (event.code !== 1000) {
@@ -84,22 +69,16 @@ class NotificationWebSocketService {
         }
       };
     } catch (error) {
-      console.error('Erro crítico na conexão WebSocket de notificações:', error);
       if (onError) onError(error);
     }
   }
   
-  // Método de reconexão com backoff exponencial
   _scheduleReconnection(onConnected, onError) {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Máximo de tentativas de reconexão atingido para notificações');
       return;
     }
     
-    // Calcula tempo de espera com backoff exponencial
     const delay = Math.min(30000, 1000 * Math.pow(2, this.reconnectAttempts));
-    
-    console.log(`Tentando reconectar WebSocket de notificações em ${delay}ms (Tentativa ${this.reconnectAttempts + 1})`);
     
     const self = this;
     this.reconnectTimeout = setTimeout(function() {
@@ -117,7 +96,7 @@ class NotificationWebSocketService {
       try {
         this.stompClient.disconnect();
       } catch (error) {
-        console.error("Erro ao desconectar WebSocket de notificações:", error);
+        // Silent error
       }
       
       this.isConnected = false;
@@ -129,33 +108,28 @@ class NotificationWebSocketService {
     }
   }
   
-  // Adicionar callback para receber notificações
   addNotificationCallback(callback) {
     if (typeof callback === 'function' && !this.notificationCallbacks.includes(callback)) {
       this.notificationCallbacks.push(callback);
     }
   }
   
-  // Remover callback
   removeNotificationCallback(callback) {
     this.notificationCallbacks = this.notificationCallbacks.filter(cb => cb !== callback);
   }
   
-  // Enviar notificação para todos os callbacks registrados
   _notifyCallbacks(notification) {
     this.notificationCallbacks.forEach(callback => {
       try {
         callback(notification);
       } catch (error) {
-        console.error('Erro ao executar callback de notificação:', error);
+        // Silent error
       }
     });
   }
   
-  // Assinar tópico de notificações pessoais
   subscribeToUserNotifications(username) {
     if (!this.isConnected || !this.stompClient || !username) {
-      console.warn('Não foi possível assinar notificações: WebSocket não conectado ou nome de usuário ausente');
       return false;
     }
     
@@ -163,15 +137,12 @@ class NotificationWebSocketService {
     
     try {
       if (!this.subscriptions.has(destination)) {
-        console.log(`Assinando notificações pessoais para ${username} em ${destination}`);
-        
         const subscription = this.stompClient.subscribe(destination, (message) => {
           try {
             const notification = JSON.parse(message.body);
-            console.log('Notificação pessoal recebida:', notification);
             this._notifyCallbacks(notification);
           } catch (error) {
-            console.error('Erro ao processar notificação pessoal:', error);
+            // Silent error
           }
         });
         
@@ -180,15 +151,12 @@ class NotificationWebSocketService {
       }
       return true;
     } catch (error) {
-      console.error('Erro ao assinar notificações pessoais:', error);
       return false;
     }
   }
   
-  // Assinar tópico de notificações globais
   subscribeToGlobalNotifications() {
     if (!this.isConnected || !this.stompClient) {
-      console.warn('Não foi possível assinar notificações globais: WebSocket não conectado');
       return false;
     }
     
@@ -196,15 +164,12 @@ class NotificationWebSocketService {
     
     try {
       if (!this.subscriptions.has(destination)) {
-        console.log(`Assinando notificações globais em ${destination}`);
-        
         const subscription = this.stompClient.subscribe(destination, (message) => {
           try {
             const notification = JSON.parse(message.body);
-            console.log('Notificação global recebida:', notification);
             this._notifyCallbacks(notification);
           } catch (error) {
-            console.error('Erro ao processar notificação global:', error);
+            // Silent error
           }
         });
         
@@ -213,30 +178,25 @@ class NotificationWebSocketService {
       }
       return true;
     } catch (error) {
-      console.error('Erro ao assinar notificações globais:', error);
       return false;
     }
   }
   
-  // Cancelar assinatura
   unsubscribe(destination) {
     const subscription = this.subscriptions.get(destination);
     if (subscription) {
       try {
         subscription.unsubscribe();
-        console.log(`Assinatura cancelada para ${destination}`);
       } catch (error) {
-        console.error(`Erro ao cancelar assinatura para ${destination}:`, error);
+        // Silent error
       }
       
       this.subscriptions.delete(destination);
     }
   }
   
-  // Chat WebSocket methods for the ChamadoDetail page
   subscribeToChamado(chamadoId, onMessageReceived) {
     if (!this.isConnected || !this.stompClient) {
-      console.warn(`Não foi possível assinar o canal do chamado ${chamadoId}: WebSocket não conectado`);
       return false;
     }
     
@@ -244,18 +204,15 @@ class NotificationWebSocketService {
     
     try {
       if (!this.subscriptions.has(destination)) {
-        console.log(`Assinando canal do chamado ${chamadoId}`);
-        
         const subscription = this.stompClient.subscribe(destination, (message) => {
           try {
             const chatMessage = JSON.parse(message.body);
-            console.log(`Mensagem recebida no canal do chamado ${chamadoId}:`, chatMessage);
             
             if (onMessageReceived) {
               onMessageReceived(chatMessage);
             }
           } catch (error) {
-            console.error(`Erro ao processar mensagem do chamado ${chamadoId}:`, error);
+            // Silent error
           }
         });
         
@@ -265,7 +222,6 @@ class NotificationWebSocketService {
       
       return true;
     } catch (error) {
-      console.error(`Erro ao assinar canal do chamado ${chamadoId}:`, error);
       return false;
     }
   }
@@ -277,7 +233,6 @@ class NotificationWebSocketService {
   
   addUser(chamadoId, user) {
     if (!this.isConnected || !this.stompClient) {
-      console.warn('Não foi possível adicionar usuário ao chat: WebSocket não conectado');
       return false;
     }
     
@@ -285,14 +240,12 @@ class NotificationWebSocketService {
       this.stompClient.send(`/app/chat.addUser/${chamadoId}`, JSON.stringify(user));
       return true;
     } catch (error) {
-      console.error('Erro ao adicionar usuário ao chat:', error);
       return false;
     }
   }
   
   sendMessage(chamadoId, message) {
     if (!this.isConnected || !this.stompClient) {
-      console.warn('Não foi possível enviar mensagem: WebSocket não conectado');
       return false;
     }
     
@@ -300,13 +253,11 @@ class NotificationWebSocketService {
       this.stompClient.send(`/app/chat.sendMessage/${chamadoId}`, JSON.stringify(message));
       return true;
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
       return false;
     }
   }
 }
 
-// Singleton para compartilhar a mesma instância em toda a aplicação
 const notificationWebSocketService = new NotificationWebSocketService();
 
 export default notificationWebSocketService;

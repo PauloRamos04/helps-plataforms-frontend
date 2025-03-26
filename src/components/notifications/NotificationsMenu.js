@@ -31,49 +31,37 @@ const NotificationsMenu = () => {
   } = useContext(NotificationsContext);
   
   const handleOpenMenu = (event) => {
-    // Prevenir propagação do evento
     event.preventDefault();
     event.stopPropagation();
     
-    console.log('Abrindo menu de notificações');
     setAnchorEl(event.currentTarget);
     setMenuOpen(true);
-   //* refreshNotifications();
   };
   
   const handleCloseMenu = (event) => {
-    // Prevenir propagação para evitar conflitos
     if (event) {
       event.preventDefault();
       event.stopPropagation();
     }
-    
-    console.log('Fechando menu de notificações');
     setAnchorEl(null);
     setMenuOpen(false);
   };
   
   const handleNotificationClick = (notification) => {
-    console.log('Notificação clicada:', notification);
-    
     if (notification.id) {
       markAsRead(notification.id);
     }
     
-    // Primeiro fechar o menu
     handleCloseMenu();
     
-    // Navegar para o chamado com delay para garantir que o menu fechou
     if (notification.chamadoId) {
       setTimeout(() => {
-        console.log('Navegando para chamado:', notification.chamadoId);
         navigate(`/chamados/${notification.chamadoId}`);
       }, 300);
     }
   };
   
   const handleMarkAllAsRead = (event) => {
-    // Prevenir propagação
     if (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -111,7 +99,6 @@ const NotificationsMenu = () => {
     }
   };
   
-  // Função para evitar erro com tooltip em botões desabilitados
   const renderTooltip = (title, children, disabled = false) => {
     if (disabled) {
       return (
@@ -130,7 +117,6 @@ const NotificationsMenu = () => {
     );
   };
   
-  // Função para garantir que o menu não feche sozinho
   useEffect(() => {
     return () => {
       setMenuOpen(false);
