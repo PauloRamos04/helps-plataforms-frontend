@@ -1,8 +1,8 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   Badge, IconButton, Menu, MenuItem, Typography, Box, 
   Divider, List, ListItem, ListItemText, CircularProgress,
-  Button, Tooltip, Chip
+  Button, Tooltip, Chip, Zoom
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -12,11 +12,12 @@ import NotificationsContext from '../../context/NotificationsContext';
 import InfoIcon from '@mui/icons-material/Info';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
+import MessageIcon from '@mui/icons-material/Message';
 
 const NotificationsMenu = () => {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   
   const { 
     notifications, 
@@ -30,30 +31,61 @@ const NotificationsMenu = () => {
   } = useContext(NotificationsContext);
   
   const handleOpenMenu = (event) => {
+    // Prevenir propagação do evento
+    event.preventDefault();
+    event.stopPropagation();
+    
+    console.log('Abrindo menu de notificações');
     setAnchorEl(event.currentTarget);
-    refreshNotifications();
+    setMenuOpen(true);
+   //* refreshNotifications();
   };
   
-  const handleCloseMenu = () => {
+  const handleCloseMenu = (event) => {
+    // Prevenir propagação para evitar conflitos
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    console.log('Fechando menu de notificações');
     setAnchorEl(null);
+    setMenuOpen(false);
   };
   
   const handleNotificationClick = (notification) => {
-    markAsRead(notification.id);
+    console.log('Notificação clicada:', notification);
     
-    if (notification.chamadoId) {
-      navigate(`/chamados/${notification.chamadoId}`);
+    if (notification.id) {
+      markAsRead(notification.id);
     }
     
+    // Primeiro fechar o menu
     handleCloseMenu();
+    
+    // Navegar para o chamado com delay para garantir que o menu fechou
+    if (notification.chamadoId) {
+      setTimeout(() => {
+        console.log('Navegando para chamado:', notification.chamadoId);
+        navigate(`/chamados/${notification.chamadoId}`);
+      }, 300);
+    }
   };
   
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = (event) => {
+    // Prevenir propagação
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     markAllAsRead();
     handleCloseMenu();
   };
   
   const formatRelativeTime = (timestamp) => {
+    if (!timestamp) return 'agora';
+    
     const date = new Date(timestamp);
     const now = new Date();
     const diffMinutes = Math.floor((now - date) / (1000 * 60));
@@ -73,15 +105,42 @@ const NotificationsMenu = () => {
       case 'CHAMADO_FECHADO':
         return <CheckCircleIcon fontSize="small" color="success" />;
       case 'NOVA_MENSAGEM':
-        return <InfoIcon fontSize="small" color="info" />;
+        return <MessageIcon fontSize="small" color="info" />;
       default:
         return <InfoIcon fontSize="small" color="action" />;
     }
   };
   
+  // Função para evitar erro com tooltip em botões desabilitados
+  const renderTooltip = (title, children, disabled = false) => {
+    if (disabled) {
+      return (
+        <span>
+          <Tooltip title={title}>
+            <span>{children}</span>
+          </Tooltip>
+        </span>
+      );
+    }
+    
+    return (
+      <Tooltip title={title}>
+        {children}
+      </Tooltip>
+    );
+  };
+  
+  // Função para garantir que o menu não feche sozinho
+  useEffect(() => {
+    return () => {
+      setMenuOpen(false);
+      setAnchorEl(null);
+    };
+  }, []);
+  
   return (
     <>
-      <Tooltip title="Notificações">
+      {renderTooltip("Notificações", 
         <IconButton 
           color="inherit" 
           onClick={handleOpenMenu}
@@ -91,12 +150,13 @@ const NotificationsMenu = () => {
             <NotificationsIcon />
           </Badge>
         </IconButton>
-      </Tooltip>
+      )}
       
       <Menu
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        open={Boolean(anchorEl) && menuOpen}
         onClose={handleCloseMenu}
+        onClick={(e) => e.stopPropagation()}
         PaperProps={{
           sx: {
             width: 320,
@@ -107,6 +167,7 @@ const NotificationsMenu = () => {
         }}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        keepMounted
       >
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle1" fontWeight="medium">
@@ -133,26 +194,34 @@ const NotificationsMenu = () => {
               </Button>
             )}
             
-            <Tooltip title="Atualizar notificações">
+            {renderTooltip("Atualizar notificações", 
               <IconButton 
                 size="small" 
-                onClick={refreshNotifications}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  refreshNotifications();
+                }}
                 disabled={loading}
               >
                 <RefreshIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+              </IconButton>,
+              loading
+            )}
             
-            <Tooltip title="Teste: Adicionar notificação">
+            {renderTooltip("Adicionar notificação de teste", 
               <IconButton 
                 size="small" 
-                onClick={addDummyNotification}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addDummyNotification();
+                }}
                 disabled={loading}
                 color="primary"
               >
                 <AddIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+              </IconButton>,
+              loading
+            )}
           </Box>
         </Box>
         
@@ -168,7 +237,10 @@ const NotificationsMenu = () => {
               <React.Fragment key={notification.id || Math.random()}>
                 <ListItem 
                   button 
-                  onClick={() => handleNotificationClick(notification)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNotificationClick(notification);
+                  }}
                   sx={{ 
                     bgcolor: notification.read ? 'transparent' : 'rgba(73, 102, 242, 0.1)',
                     py: 1.5

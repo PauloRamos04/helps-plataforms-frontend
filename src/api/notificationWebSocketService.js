@@ -15,96 +15,72 @@ class NotificationWebSocketService {
 
   connect(onConnected, onError) {
     try {
-      // Cancela tentativas anteriores de reconexão
       if (this.reconnectTimeout) {
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = null;
       }
       
-      // Verifica se há token de autenticação
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('Sem token de autenticação para WebSocket de notificações');
-        if (onError) onError(new Error('Falha na autenticação para conexão WebSocket de notificações'));
+        if (onError) onError(new Error('Falha na autenticação para conexão WebSocket'));
         return;
       }
       
-      // URL do WebSocket
       const socketUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}/ws`;
       
-      // Configurações robustas de socket
+      // Configurações para SockJS com tratamento adequado para CORS
       const socket = new SockJS(socketUrl, null, {
         transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
-        timeout: 5000,
-        xhrFields: { withCredentials: false }
+        timeout: 5000
       });
       
-      // Desativa credenciais para evitar problemas de CORS
-      if (socket.xhr && socket.xhr.withCredentials !== undefined) {
-        socket.xhr.withCredentials = false;
-      }
-      
-      // Configurações do STOMP
+      // Ativar modo de debug temporariamente para ver os detalhes das mensagens
       this.stompClient = webstomp.over(socket, {
-        debug: false,
+        debug: true,
         heartbeat: { outgoing: 20000, incoming: 20000 },
         reconnect: true
       });
       
-      // Opções de conexão com token
+      // Cabeçalhos otimizados para conexão
       const connectHeaders = { 
         'Authorization': `Bearer ${token}`,
         'accept-version': '1.1,1.0',
         'heart-beat': '10000,10000'
       };
       
-      // Tenta conectar
+      console.log("Conectando WebSocket com cabeçalhos:", JSON.stringify(connectHeaders));
+      
       this.stompClient.connect(
         connectHeaders,
         (frame) => {
-          console.log('WebSocket de notificações conectado:', frame);
           this.isConnected = true;
           this.reconnectAttempts = 0;
-          
           if (onConnected) onConnected();
         },
         (error) => {
-          console.error('Erro na conexão WebSocket de notificações:', error);
           this.isConnected = false;
-          
           if (onError) onError(error);
-          
-          // Agenda reconexão
           this._scheduleReconnection(onConnected, onError);
         }
       );
       
-      // Tratamento de fechamento da conexão
       socket.onclose = (event) => {
-        console.warn('WebSocket de notificações fechado:', event);
         this.isConnected = false;
-        
         if (event.code !== 1000) {
           this._scheduleReconnection(onConnected, onError);
         }
       };
     } catch (error) {
-      console.error('Erro crítico na conexão WebSocket de notificações:', error);
       if (onError) onError(error);
     }
   }
   
-  // Método de reconexão com backoff exponencial
   _scheduleReconnection(onConnected, onError) {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Máximo de tentativas de reconexão atingido para notificações');
       return;
     }
     
-    // Calcula tempo de espera com backoff exponencial
     const delay = Math.min(30000, 1000 * Math.pow(2, this.reconnectAttempts));
-    
-    console.log(`Tentando reconectar WebSocket de notificações em ${delay}ms (Tentativa ${this.reconnectAttempts + 1})`);
     
     const self = this;
     this.reconnectTimeout = setTimeout(function() {
@@ -122,7 +98,7 @@ class NotificationWebSocketService {
       try {
         this.stompClient.disconnect();
       } catch (error) {
-        console.error("Erro ao desconectar WebSocket de notificações:", error);
+        console.error("Error during disconnect:", error);
       }
       
       this.isConnected = false;
@@ -134,19 +110,16 @@ class NotificationWebSocketService {
     }
   }
   
-  // Adicionar callback para receber notificações
   addNotificationCallback(callback) {
     if (typeof callback === 'function' && !this.notificationCallbacks.includes(callback)) {
       this.notificationCallbacks.push(callback);
     }
   }
   
-  // Remover callback
   removeNotificationCallback(callback) {
     this.notificationCallbacks = this.notificationCallbacks.filter(cb => cb !== callback);
   }
   
-  // Enviar notificação para todos os callbacks registrados
   _notifyCallbacks(notification) {
     this.notificationCallbacks.forEach(callback => {
       try {
@@ -157,43 +130,45 @@ class NotificationWebSocketService {
     });
   }
   
-  // Assinar tópico de notificações pessoais
   subscribeToUserNotifications(username) {
     if (!this.isConnected || !this.stompClient || !username) {
-      console.warn('Não foi possível assinar notificações: WebSocket não conectado ou nome de usuário ausente');
+      console.warn(`Não foi possível assinar notificações para ${username}: WebSocket não conectado ou nome de usuário inválido`);
       return false;
     }
     
     const destination = `/user/${username}/queue/notifications`;
+    console.log(`Tentando assinar notificações para usuário: ${username} no destino: ${destination}`);
     
     try {
       if (!this.subscriptions.has(destination)) {
-        console.log(`Assinando notificações pessoais para ${username} em ${destination}`);
+        console.log(`Criando nova subscrição para ${destination}`);
         
         const subscription = this.stompClient.subscribe(destination, (message) => {
+          console.log(`Mensagem recebida em ${destination}:`, message);
           try {
             const notification = JSON.parse(message.body);
-            console.log('Notificação pessoal recebida:', notification);
+            console.log(`Notificação processada:`, notification);
             this._notifyCallbacks(notification);
           } catch (error) {
             console.error('Erro ao processar notificação pessoal:', error);
           }
-        });
+        }, { id: `user-notif-${Date.now()}` });
         
         this.subscriptions.set(destination, subscription);
-        return true;
+        console.log(`Subscrição criada com sucesso para ${destination}`);
+      } else {
+        console.log(`Já existe uma subscrição ativa para ${destination}`);
       }
+      
       return true;
     } catch (error) {
-      console.error('Erro ao assinar notificações pessoais:', error);
+      console.error(`Erro ao assinar notificações pessoais para ${username}:`, error);
       return false;
     }
   }
   
-  // Assinar tópico de notificações globais
   subscribeToGlobalNotifications() {
     if (!this.isConnected || !this.stompClient) {
-      console.warn('Não foi possível assinar notificações globais: WebSocket não conectado');
       return false;
     }
     
@@ -201,37 +176,32 @@ class NotificationWebSocketService {
     
     try {
       if (!this.subscriptions.has(destination)) {
-        console.log(`Assinando notificações globais em ${destination}`);
-        
         const subscription = this.stompClient.subscribe(destination, (message) => {
           try {
             const notification = JSON.parse(message.body);
-            console.log('Notificação global recebida:', notification);
             this._notifyCallbacks(notification);
           } catch (error) {
-            console.error('Erro ao processar notificação global:', error);
+            console.error("Error parsing global notification:", error);
           }
         });
         
         this.subscriptions.set(destination, subscription);
-        return true;
       }
+      
       return true;
     } catch (error) {
-      console.error('Erro ao assinar notificações globais:', error);
+      console.error("Error subscribing to global notifications:", error);
       return false;
     }
   }
   
-  // Cancelar assinatura
   unsubscribe(destination) {
     const subscription = this.subscriptions.get(destination);
     if (subscription) {
       try {
         subscription.unsubscribe();
-        console.log(`Assinatura cancelada para ${destination}`);
       } catch (error) {
-        console.error(`Erro ao cancelar assinatura para ${destination}:`, error);
+        console.error("Error unsubscribing:", error);
       }
       
       this.subscriptions.delete(destination);
@@ -239,7 +209,6 @@ class NotificationWebSocketService {
   }
 }
 
-// Singleton para compartilhar a mesma instância em toda a aplicação
 const notificationWebSocketService = new NotificationWebSocketService();
 
 export default notificationWebSocketService;

@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AuthContext from './AuthContext';
 import notificationService from '../api/notificationService';
-import websocketService from '../api/websocketService';
+import notificationWebSocketService from '../api/notificationWebSocketService';
 import notificationsManager from '../utils/notificationsManager';
 
 const NotificationsContext = createContext();
@@ -13,30 +13,23 @@ export const NotificationsProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
 
-  const loadNotifications = async () => {
+  const loadNotifications = async (silent = false) => {
     if (!auth.isAuthenticated) return;
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
-      console.log("Carregando notificações...");
-      
       try {
         const data = await notificationService.getUnreadNotifications();
-        console.log("Notificações carregadas da API:", data);
         
         if (Array.isArray(data)) {
           setNotifications(data);
           setUnreadCount(data.length);
         } else {
-          console.warn("Dados de notificações inválidos da API, usando gerenciador local");
-          // Use o gerenciador local como fallback
           const localNotifications = notificationsManager.getUnreadNotifications();
           setNotifications(localNotifications);
           setUnreadCount(localNotifications.length);
         }
       } catch (apiError) {
-        // Se houver erro na API, usamos o gerenciador local
-        console.warn("Erro na API de notificações, usando gerenciador local:", apiError);
         const localNotifications = notificationsManager.getUnreadNotifications();
         setNotifications(localNotifications);
         setUnreadCount(localNotifications.length);
@@ -44,7 +37,7 @@ export const NotificationsProvider = ({ children }) => {
     } catch (error) {
       console.error("Erro ao carregar notificações:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -68,24 +61,18 @@ export const NotificationsProvider = ({ children }) => {
   const markAllAsRead = async () => {
     try {
       await notificationService.markAllAsRead();
-
       setNotifications(prev =>
         prev.map(notification => ({ ...notification, read: true }))
       );
-
       setUnreadCount(0);
     } catch (error) {
       console.error("Erro ao marcar todas notificações como lidas:", error);
     }
   };
 
-  // Adiciona uma notificação manualmente (para testes ou quando recebida via WebSocket)
   const addNotification = (notification) => {
-    console.log("Adicionando nova notificação:", notification);
-    // Verificar se a notificação é válida
     if (!notification) return;
     
-    // Adicionar ID se não existir
     const notificationWithId = {
       ...notification,
       id: notification.id || Date.now(),
@@ -93,38 +80,51 @@ export const NotificationsProvider = ({ children }) => {
       read: notification.read || false
     };
     
-    setNotifications(prev => [notificationWithId, ...prev]);
+    setNotifications(prev => {
+      if (prev.some(n => n.id === notificationWithId.id)) {
+        return prev;
+      }
+      return [notificationWithId, ...prev];
+    });
+    
     if (!notification.read) {
       setUnreadCount(prev => prev + 1);
     }
   };
 
-  const connectToWebSocket = () => {
-    if (!auth.isAuthenticated) return;
-
-    console.log("Tentando conectar ao WebSocket...");
+  const setupWebSocket = () => {
+    if (!auth.isAuthenticated || !auth.user) return;
     
-    websocketService.connect(
+    console.log("Configurando WebSocket para notificações...");
+    console.log("Usuário autenticado:", auth.user.username);
+    console.log("Papéis do usuário:", auth.user.roles);
+    
+    const handleNotification = (notification) => {
+      console.log("Notificação recebida via WebSocket:", notification);
+      // Adiciona à lista de notificações no estado
+      addNotification(notification);
+    };
+    
+    notificationWebSocketService.removeNotificationCallback(handleNotification);
+    notificationWebSocketService.addNotificationCallback(handleNotification);
+    
+    notificationWebSocketService.connect(
       () => {
-        console.log("WebSocket conectado, configurando assinaturas de notificações");
         setWsConnected(true);
+        console.log("WebSocket conectado com sucesso!");
         
-        // Inscrever-se no tópico global de notificações
-        websocketService.subscribeToGlobalNotifications((notification) => {
-          console.log("Notificação global recebida:", notification);
-          addNotification(notification);
-        });
+        // Primeiro assina notificações globais
+        console.log("Assinando tópico de notificações globais...");
+        const globalSuccess = notificationWebSocketService.subscribeToGlobalNotifications();
+        console.log("Assinatura global bem-sucedida:", globalSuccess);
         
-        // Inscrever-se nas notificações específicas do usuário
-        if (auth.user && auth.user.username) {
-          websocketService.subscribeToNotifications(
-            auth.user.id,
-            auth.user.username,
-            (notification) => {
-              console.log("Notificação pessoal recebida:", notification);
-              addNotification(notification);
-            }
-          );
+        // Depois assina notificações pessoais
+        if (auth.user.username) {
+          console.log("Assinando tópico de notificações pessoais para", auth.user.username);
+          const userSuccess = notificationWebSocketService.subscribeToUserNotifications(auth.user.username);
+          console.log("Assinatura pessoal bem-sucedida:", userSuccess);
+        } else {
+          console.warn("Nome de usuário não disponível para assinar notificações pessoais");
         }
       },
       (error) => {
@@ -134,35 +134,26 @@ export const NotificationsProvider = ({ children }) => {
     );
   };
 
-  // Efeito para conexão inicial e carregar notificações
-  useEffect(() => {
-    if (!auth.isAuthenticated) {
+useEffect(() => {
+  if (!auth.isAuthenticated) {
       setNotifications([]);
       setUnreadCount(0);
-      return;
-    }
-
-    console.log("Auth state mudou, recarregando notificações e conectando WebSocket");
-    loadNotifications();
-    connectToWebSocket();
-
-    // Polling como fallback
-    const interval = setInterval(loadNotifications, 15000);
-    
-    return () => {
-      clearInterval(interval);
-      if (websocketService.isConnected) {
-        websocketService.disconnect();
-      }
       setWsConnected(false);
-    };
-  }, [auth.isAuthenticated, auth.user?.id]);
+      notificationWebSocketService.disconnect();
+      return;
+  }
+  setupWebSocket();
 
-  // Adicionar uma notificação artificial para teste
+  return () => {
+      notificationWebSocketService.disconnect();
+      setWsConnected(false);
+  };
+}, [auth.isAuthenticated, auth.user?.id]);
+
   const addDummyNotification = () => {
     const dummyNotification = {
       id: Date.now(),
-      message: "Nova notificação de teste - " + new Date().toLocaleTimeString(),
+      message: `Nova notificação de teste - ${new Date().toLocaleTimeString()}`,
       type: "NOVO_CHAMADO",
       read: false,
       chamadoId: 1,

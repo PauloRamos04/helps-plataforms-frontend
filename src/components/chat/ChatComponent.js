@@ -6,8 +6,20 @@ import {
 import SendIcon from '@mui/icons-material/Send';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import AuthContext from '../../context/AuthContext';
-import websocketService from '../../api/websocketService';
 import { chamadoService } from '../../api/chamadoService';
+import websocketService from '../../api/websocketService';
+
+// Verificar se o serviço tem os métodos necessários
+const checkWebSocketService = () => {
+  const requiredMethods = ['connect', 'subscribeToChamado', 'addUser', 'sendMessage', 'unsubscribeFromChamado'];
+  const missingMethods = requiredMethods.filter(method => !websocketService[method] || typeof websocketService[method] !== 'function');
+  
+  if (missingMethods.length > 0) {
+    console.error('Métodos ausentes no websocketService:', missingMethods);
+    return false;
+  }
+  return true;
+};
 
 const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const { auth } = useContext(AuthContext);
@@ -20,7 +32,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const [notification, setNotification] = useState({ open: false, message: '', type: 'info' });
   const messagesEndRef = useRef(null);
   const pollingIntervalRef = useRef(null);
-  const isWebSocketEnabled = true;
+  const [isWebSocketEnabled, setIsWebSocketEnabled] = useState(checkWebSocketService());
 
   const isCurrentUserMessage = (message) => {
     const currentUserId = auth.user?.id;
@@ -119,48 +131,75 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   };
 
   const connectWebSocket = () => {
-    if (!isWebSocketEnabled || !chamadoId) return;
+    if (!isWebSocketEnabled || !chamadoId) {
+      console.log('WebSocket desabilitado ou chamadoId não fornecido');
+      startPolling(); // Fallback para polling
+      return;
+    }
     
     setIsConnecting(true);
     setError(null);
     
-    websocketService.connect(
-      () => {
-        const success = websocketService.subscribeToChamado(chamadoId, (message) => {
-          if (message.type === 'CHAT') {
-            setMessages(prev => {
-              const exists = prev.some(m => m.id === message.id);
-              if (exists) return prev;
-              return [...prev, message];
+    try {
+      websocketService.connect(
+        () => {
+          console.log('WebSocket conectado com sucesso');
+          try {
+            const success = websocketService.subscribeToChamado(chamadoId, (message) => {
+              console.log('Mensagem recebida via WebSocket:', message);
+              if (message.type === 'CHAT') {
+                setMessages(prev => {
+                  const exists = prev.some(m => m.id === message.id);
+                  if (exists) return prev;
+                  return [...prev, message];
+                });
+              }
             });
+            
+            if (success) {
+              console.log('Assinatura ao chamado bem-sucedida');
+              try {
+                websocketService.addUser(chamadoId, {
+                  type: 'JOIN',
+                  chamadoId: chamadoId,
+                  senderId: auth.user?.id,
+                  senderName: auth.user?.name || auth.user?.username || 'Usuário',
+                  content: '',
+                  timestamp: new Date().toISOString()
+                });
+                console.log('Usuário adicionado ao chat');
+              } catch (userError) {
+                console.error('Erro ao adicionar usuário ao chat:', userError);
+              }
+              
+              setIsConnecting(false);
+              startPolling();
+            } else {
+              console.error('Falha ao assinar o canal do chat');
+              setError('Não foi possível se inscrever no canal do chat');
+              setIsConnecting(false);
+              startPolling();
+            }
+          } catch (subError) {
+            console.error('Erro ao tentar assinar o canal:', subError);
+            setError('Erro ao conectar ao chat, usando modo alternativo.');
+            setIsConnecting(false);
+            startPolling();
           }
-        });
-        
-        if (success) {
-          websocketService.addUser(chamadoId, {
-            type: 'JOIN',
-            chamadoId: chamadoId,
-            senderId: auth.user?.id,
-            senderName: auth.user?.name || auth.user?.username || 'Usuário',
-            content: '',
-            timestamp: new Date().toISOString()
-          });
-          
-          setIsConnecting(false);
-          
-          startPolling();
-        } else {
-          setError('Não foi possível se inscrever no canal do chat');
+        },
+        (error) => {
+          console.error('Erro na conexão WebSocket:', error);
+          setError('Usando modo alternativo para receber mensagens.');
           setIsConnecting(false);
           startPolling();
         }
-      },
-      (error) => {
-        setError('Usando modo alternativo para receber mensagens.');
-        setIsConnecting(false);
-        startPolling();
-      }
-    );
+      );
+    } catch (error) {
+      console.error('Erro ao iniciar conexão WebSocket:', error);
+      setError('Falha na conexão, usando modo alternativo para receber mensagens.');
+      setIsConnecting(false);
+      startPolling();
+    }
   };
 
   useEffect(() => {
@@ -168,12 +207,19 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     
     fetchMessages();
     
-    connectWebSocket();
-    startPolling();
+    if (isWebSocketEnabled) {
+      connectWebSocket();
+    } else {
+      startPolling();
+    }
     
     return () => {
-      if (websocketService.isConnected) {
-        websocketService.unsubscribeFromChamado(chamadoId);
+      if (isWebSocketEnabled && websocketService.isConnected) {
+        try {
+          websocketService.unsubscribeFromChamado(chamadoId);
+        } catch (error) {
+          console.error('Erro ao cancelar assinatura do chat:', error);
+        }
       }
       
       if (pollingIntervalRef.current) {
@@ -219,10 +265,17 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       let success = false;
       
       if (isWebSocketEnabled && websocketService.isConnected) {
-        success = websocketService.sendMessage(chamadoId, messageObj);
+        try {
+          success = websocketService.sendMessage(chamadoId, messageObj);
+          console.log('Mensagem enviada via WebSocket:', success);
+        } catch (wsError) {
+          console.error('Erro ao enviar mensagem via WebSocket:', wsError);
+          success = false;
+        }
       }
       
       if (!success) {
+        console.log('Enviando mensagem via API');
         await chamadoService.enviarMensagem(chamadoId, { conteudo: currentMessage });
         
         setMessages(prev => prev.filter(m => m.id !== optimisticId));
@@ -230,6 +283,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         fetchMessages(true);
       }
     } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
       
       setMessageInput(currentMessage);
@@ -258,7 +312,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const handleRefreshMessages = () => {
     fetchMessages();
 
-    if (!websocketService.isConnected) {
+    if (isWebSocketEnabled && !websocketService.isConnected) {
       connectWebSocket();
     }
   };
@@ -316,15 +370,19 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
           Chat do Chamado #{chamadoId}
         </Typography>
         
-        <Tooltip title="Atualizar mensagens">
-          <IconButton 
-            size="small" 
-            onClick={handleRefreshMessages}
-            disabled={isConnecting}
-          >
-            {isConnecting ? <CircularProgress size={20} /> : <RefreshIcon />}
-          </IconButton>
-        </Tooltip>
+        <span>
+          <Tooltip title="Atualizar mensagens">
+            <span>
+              <IconButton 
+                size="small" 
+                onClick={handleRefreshMessages}
+                disabled={isConnecting}
+              >
+                {isConnecting ? <CircularProgress size={20} /> : <RefreshIcon />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </span>
       </Box>
       
       {error && (

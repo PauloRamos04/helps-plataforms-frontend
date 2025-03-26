@@ -39,6 +39,7 @@ export const userService = {
       console.log('Enviando dados para atualizar usuário:', userData);
       
       const response = await api.put(`/admin/users/${id}`, userData);
+
       return response.data;
     } catch (error) {
       console.error(`Erro ao atualizar usuário ${id}:`, error);
