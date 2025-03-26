@@ -4,10 +4,9 @@ const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'https://plataforma-chamados-helps-production-4815.up.railway.app',
   headers: {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*', // Add this header
-    'Access-Control-Allow-Methods': 'GET,PUT,POST,DELETE,PATCH,OPTIONS',
+    'Access-Control-Allow-Origin': 'https://helps-plataforms-frontend.vercel.app'
   },
-  withCredentials: true, // Enable credentials (important for cookies/auth)
+  withCredentials: true,
   timeout: 15000
 });
 
@@ -27,18 +26,16 @@ const parseJwt = (token) => {
   }
 };
 
-// Request interceptor
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // For OPTIONS requests, set additional headers
+    if (config.method === 'options') {
+      config.headers['Access-Control-Request-Method'] = config.method.toUpperCase();
+      config.headers['Access-Control-Request-Headers'] = 'Content-Type, Authorization';
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor
