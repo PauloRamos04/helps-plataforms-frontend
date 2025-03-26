@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import AuthContext from '../context/AuthContext';
-import websocketService from '../api/websocketService';
+import notificationWebSocketService from '../api/notificationWebSocketService';
 import notificationService from '../api/notificationService';
 
 const useNotifications = () => {
@@ -8,25 +8,33 @@ const useNotifications = () => {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [wsConnected, setWsConnected] = useState(false);
 
+    // Função para carregar notificações não lidas
     const loadNotifications = async () => {
         if (!auth.isAuthenticated) return;
 
         setLoading(true);
         try {
             const data = await notificationService.getUnreadNotifications();
-            setNotifications(data);
-            setUnreadCount(data.length);
+            if (Array.isArray(data)) {
+                setNotifications(data);
+                setUnreadCount(data.length);
+            }
         } catch (error) {
-            // Silenciar erros para experiência do usuário
+            console.error('Erro ao carregar notificações:', error);
         } finally {
             setLoading(false);
         }
     };
 
+    // Marcar uma notificação específica como lida
     const markAsRead = async (notificationId) => {
+        if (!notificationId) return;
+        
         try {
             await notificationService.markAsRead(notificationId);
+            
             setNotifications(prev =>
                 prev.map(notification =>
                     notification.id === notificationId
@@ -37,10 +45,11 @@ const useNotifications = () => {
 
             setUnreadCount(prev => Math.max(0, prev - 1));
         } catch (error) {
-            // Silenciar erros para experiência do usuário
+            console.error('Erro ao marcar notificação como lida:', error);
         }
     };
 
+    // Marcar todas as notificações como lidas
     const markAllAsRead = async () => {
         try {
             await notificationService.markAllAsRead();
@@ -51,50 +60,94 @@ const useNotifications = () => {
 
             setUnreadCount(0);
         } catch (error) {
-            // Silenciar erros para experiência do usuário
+            console.error('Erro ao marcar todas notificações como lidas:', error);
         }
     };
 
+    // Callback para processar novas notificações recebidas via WebSocket
+    const handleNewNotification = (notification) => {
+        if (!notification) return;
+        
+        // Verificar se já temos esta notificação
+        const exists = notifications.some(n => n.id === notification.id);
+        if (exists) return;
+        
+        console.log('Nova notificação recebida:', notification);
+        
+        // Adicionar à lista de notificações
+        setNotifications(prev => {
+            const newNotifications = [notification, ...prev];
+            return newNotifications;
+        });
+        
+        // Incrementar contagem de não lidas
+        if (!notification.read) {
+            setUnreadCount(prev => prev + 1);
+        }
+    };
+
+    // Configurar conexão WebSocket
     useEffect(() => {
-        if (!auth.isAuthenticated) return;
-    
-        // Configuração inicial do WebSocket
-        const setupNotificationListener = () => {
-            // Se já estiver conectado, não reconecta
-            if (websocketService.isConnected) return;
-    
-            websocketService.connect(
+        if (!auth.isAuthenticated || !auth.user) return;
+        
+        const setupWebSocket = () => {
+            setWsConnected(false);
+            
+            notificationWebSocketService.connect(
                 () => {
+                    setWsConnected(true);
+                    console.log('WebSocket conectado - iniciando assinaturas de notificações');
+                    
+                    // Assinar canal de notificações pessoais usando o ID e username do usuário
+                    const userId = auth.user?.id;
                     const username = auth.user?.username;
                     
-                    if (username) {
-                        websocketService.subscribeToNotifications(
-                            auth.user?.id,
-                            username,
-                            (notification) => {
-                                setNotifications(prev => [notification, ...prev]);
-                                setUnreadCount(prev => prev + 1);
-                            }
+                    if (userId && username) {
+                        const success = notificationWebSocketService.subscribeToUserNotifications(
+                            userId,
+                            username
                         );
+                        
+                        if (success) {
+                            console.log(`Assinatura de notificações para usuário ${username} (ID: ${userId}) bem-sucedida`);
+                        } else {
+                            console.warn(`Falha ao assinar notificações para ${username} (${userId})`);
+                        }
+                    } else {
+                        console.warn('Dados de usuário insuficientes para assinatura de notificações');
                     }
+                    
+                    // Assinar canal de notificações globais
+                    notificationWebSocketService.subscribeToGlobalNotifications();
+                    
+                    // Registrar callback para novas notificações
+                    notificationWebSocketService.addNotificationCallback(handleNewNotification);
+                    
+                    // Carregar notificações existentes
+                    loadNotifications();
                 },
                 (error) => {
-                    console.error('Erro na configuração do WebSocket:', error);
-                    // Fallback para polling
+                    console.error('Erro na conexão WebSocket:', error);
+                    setWsConnected(false);
+                    
+                    // Em caso de falha, recorrer ao polling
                     loadNotifications();
                 }
             );
         };
-    
-        setupNotificationListener();
-    
-        // Polling como fallback
-        const interval = setInterval(loadNotifications, 30000);
         
+        // Iniciar conexão WebSocket
+        setupWebSocket();
+        
+        // Polling como fallback (menos frequente se WebSocket estiver funcionando)
+        const pollingInterval = setInterval(() => {
+            loadNotifications();
+        }, wsConnected ? 60000 : 15000); // 60s com WebSocket / 15s sem WebSocket
+        
+        // Cleanup na desmontagem do componente
         return () => {
-            clearInterval(interval);
-            // Opcional: desconectar o WebSocket
-            websocketService.disconnect();
+            notificationWebSocketService.removeNotificationCallback(handleNewNotification);
+            clearInterval(pollingInterval);
         };
     }, [auth.isAuthenticated, auth.user]);
 
@@ -102,9 +155,11 @@ const useNotifications = () => {
         notifications,
         unreadCount,
         loading,
+        wsConnected,
         markAsRead,
         markAllAsRead,
-        refreshNotifications: loadNotifications
+        refreshNotifications: loadNotifications,
+        addNotification: handleNewNotification
     };
 };
 

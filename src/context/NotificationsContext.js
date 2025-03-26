@@ -1,36 +1,36 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import AuthContext from './AuthContext';
 import notificationService from '../api/notificationService';
 import notificationWebSocketService from '../api/notificationWebSocketService';
-import AuthContext from './AuthContext';
 
 const NotificationsContext = createContext();
 
 export const NotificationsProvider = ({ children }) => {
+  const { auth } = useContext(AuthContext);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
-  const { currentUser } = useContext(AuthContext);
 
+  // Carregar notificações não lidas
   const fetchNotifications = async () => {
+    if (!auth.isAuthenticated) return;
+    
     setLoading(true);
     try {
-      const fetchedNotifications = await notificationService.getAllNotifications();
-      setNotifications(fetchedNotifications || []);
-      updateUnreadCount(fetchedNotifications);
+      const data = await notificationService.getUnreadNotifications();
+      if (Array.isArray(data)) {
+        setNotifications(data);
+        setUnreadCount(data.filter(n => !n.read).length);
+      }
     } catch (error) {
-      setNotifications([]);
-      setUnreadCount(0);
+      console.error('Erro ao buscar notificações:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const updateUnreadCount = (notificationsList) => {
-    const count = notificationsList ? notificationsList.filter(n => !n.read).length : 0;
-    setUnreadCount(count);
-  };
-
+  // Marcar uma notificação como lida
   const markAsRead = async (notificationId) => {
     try {
       await notificationService.markAsRead(notificationId);
@@ -41,12 +41,14 @@ export const NotificationsProvider = ({ children }) => {
         )
       );
       
-      setUnreadCount(prevCount => Math.max(0, prevCount - 1));
+      // Atualizar contador de não lidas
+      updateUnreadCount();
     } catch (error) {
-      // Silent error
+      console.error('Erro ao marcar notificação como lida:', error);
     }
   };
 
+  // Marcar todas as notificações como lidas
   const markAllAsRead = async () => {
     try {
       await notificationService.markAllAsRead();
@@ -57,72 +59,89 @@ export const NotificationsProvider = ({ children }) => {
       
       setUnreadCount(0);
     } catch (error) {
-      // Silent error
+      console.error('Erro ao marcar todas as notificações como lidas:', error);
     }
   };
 
-  const refreshNotifications = () => {
-    fetchNotifications();
+  // Atualizar contador de notificações não lidas
+  const updateUnreadCount = () => {
+    const count = notifications.filter(n => !n.read).length;
+    setUnreadCount(count);
   };
 
-  const handleNewNotification = (notification) => {
-    setNotifications(prevNotifications => {
-      // Avoid duplicates
-      const exists = prevNotifications.some(n => n.id === notification.id);
-      if (exists) return prevNotifications;
+  // Adicionar nova notificação
+  const addNotification = (notification) => {
+    if (!notification) return;
+    
+    setNotifications(prev => {
+      // Verificar se a notificação já existe
+      const exists = prev.some(n => n.id === notification.id);
+      if (exists) return prev;
       
-      const newNotifications = [notification, ...prevNotifications];
-      updateUnreadCount(newNotifications);
+      // Adicionar nova notificação
+      const newNotifications = [notification, ...prev];
+      
+      // Atualizar contador se a notificação não estiver lida
+      if (!notification.read) {
+        setUnreadCount(prevCount => prevCount + 1);
+      }
+      
       return newNotifications;
     });
   };
 
-  const addDummyNotification = async () => {
-    try {
-      const dummyNotification = await notificationService.createTestNotification(
-        'Esta é uma notificação de teste',
-        'NOVA_MENSAGEM'
-      );
-      
-      if (dummyNotification) {
-        handleNewNotification(dummyNotification);
-      }
-    } catch (error) {
-      // Silent error
-    }
-  };
-
+  // Configurar WebSocket para notificações em tempo real
   const setupWebSocket = () => {
-    if (!currentUser || !currentUser.username) return;
+    if (!auth.isAuthenticated || !auth.user) return;
     
     notificationWebSocketService.connect(
       () => {
         setWsConnected(true);
         
-        // Subscribe to user's personal notifications
-        notificationWebSocketService.subscribeToUserNotifications(currentUser.username);
+        // Assinar notificações do usuário atual
+        const userId = auth.user.id;
+        const username = auth.user.username;
         
-        // Subscribe to global notifications if needed
+        if (userId && username) {
+          notificationWebSocketService.subscribeToUserNotifications(userId, username);
+          
+          // Registrar callback para receber notificações
+          notificationWebSocketService.addNotificationCallback(addNotification);
+        }
+        
+        // Também assinar notificações globais
         notificationWebSocketService.subscribeToGlobalNotifications();
-        
-        // Register callback for new notifications
-        notificationWebSocketService.addNotificationCallback(handleNewNotification);
       },
       (error) => {
+        console.error('Erro na conexão WebSocket:', error);
         setWsConnected(false);
       }
     );
   };
 
+  // Efeito para iniciar carregamento de notificações e setup de WebSocket
   useEffect(() => {
-    fetchNotifications();
-    setupWebSocket();
-    
-    return () => {
-      notificationWebSocketService.disconnect();
-    };
-  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (auth.isAuthenticated) {
+      fetchNotifications();
+      setupWebSocket();
+      
+      // Polling como fallback
+      const interval = setInterval(() => {
+        fetchNotifications();
+      }, 30000);
+      
+      return () => {
+        clearInterval(interval);
+        notificationWebSocketService.disconnect();
+      };
+    } else {
+      // Limpar o estado quando o usuário não está autenticado
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+  }, [auth.isAuthenticated, auth.user]);
 
+  // Valor a ser fornecido pelo contexto
   const contextValue = {
     notifications,
     unreadCount,
@@ -130,8 +149,8 @@ export const NotificationsProvider = ({ children }) => {
     wsConnected,
     markAsRead,
     markAllAsRead,
-    refreshNotifications,
-    addDummyNotification
+    refreshNotifications: fetchNotifications,
+    addNotification
   };
 
   return (
