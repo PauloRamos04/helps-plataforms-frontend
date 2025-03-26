@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'https://plataforma-chamados-helps-production-4815.up.railway.app',
+  baseURL: process.env.REACT_APP_API_URL || 'https://plataforma-chamados-helps-production.up.railway.app',
   headers: {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': 'https://helps-plataforms-frontend.vercel.app'
