@@ -1,10 +1,13 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://plataforma-chamados-helps-production-4815.up.railway.app',
+  baseURL: process.env.REACT_APP_API_URL || 'https://plataforma-chamados-helps-production-4815.up.railway.app',
   headers: {
     'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*', // Add this header
+    'Access-Control-Allow-Methods': 'GET,PUT,POST,DELETE,PATCH,OPTIONS',
   },
+  withCredentials: true, // Enable credentials (important for cookies/auth)
   timeout: 15000
 });
 
@@ -24,6 +27,7 @@ const parseJwt = (token) => {
   }
 };
 
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -37,22 +41,16 @@ api.interceptors.request.use(
   }
 );
 
+// Response interceptor
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    if (error.response) {
-      if (error.response.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 100);
-      }
+    if (error.response && error.response.status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
-    
     return Promise.reject(error);
   }
 );
@@ -60,7 +58,13 @@ api.interceptors.response.use(
 export const authService = {
   login: async (credentials) => {
     try {
-      const response = await api.post('/login', credentials);
+      const response = await api.post('/login', credentials, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+      
       const data = response.data;
       
       if (data.acessToken || data.accessToken) {
@@ -93,6 +97,7 @@ export const authService = {
         message: 'Erro de autenticação: token inválido ou ausente'
       };
     } catch (error) {
+      console.error('Login error details:', error.response ? error.response.data : error);
       return {
         success: false,
         message: error.response?.data?.message || 'Credenciais inválidas'
