@@ -23,6 +23,8 @@ export const AuthProvider = ({ children }) => {
         if (token && userStr) {
           try {
             const user = JSON.parse(userStr);
+            
+            // Normalize roles to always be an array
             if (!user.roles) {
               user.roles = [];
             } else if (!Array.isArray(user.roles)) {
@@ -60,23 +62,33 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authService.login(credentials);
 
+      console.log('Login response:', response);
+
       if (response.success) {
         console.log('Login successful, updating state');
 
         const user = response.user;
+        const token = response.token;
+
+        // Ensure roles is an array
         if (!user.roles) {
           user.roles = [];
         } else if (!Array.isArray(user.roles)) {
           user.roles = [user.roles];
         }
 
+        // Explicitly store in localStorage
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+
         setAuth({
           isAuthenticated: true,
           user: user,
-          token: response.token
+          token: token
         });
 
         console.log('User roles after login:', user.roles);
+        console.log('Token stored:', !!localStorage.getItem('token'));
       } else {
         console.log('Login failed:', response.message);
       }
@@ -114,7 +126,6 @@ export const AuthProvider = ({ children }) => {
     };
 
     const normalizedRoleToCheck = normalizeRole(roleToCheck);
-
 
     return auth.user.roles.some(role => {
       const normalizedUserRole = normalizeRole(role);

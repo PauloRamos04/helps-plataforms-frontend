@@ -30,7 +30,7 @@ class NotificationWebSocketService {
       }
       
       // URL do WebSocket
-      const socketUrl = `${process.env.REACT_APP_API_URL || 'https://plataforma-chamados-helps-production.up.railway.app'}/ws`
+      const socketUrl = `${process.env.REACT_APP_API_URL}/ws`
       
       // Configurações robustas de socket
       const socket = new SockJS(socketUrl, null, {

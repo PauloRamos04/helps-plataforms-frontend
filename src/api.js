@@ -1,10 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'https://plataforma-chamados-helps-production.up.railway.app',
+  baseURL: process.env.REACT_APP_API_URL || 'https://unique-enchantment-production.up.railway.app',
   headers: {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': 'https://helps-plataforms-frontend.vercel.app'
+    'Content-Type': 'application/json'
   },
   withCredentials: true,
   timeout: 15000
@@ -22,20 +21,23 @@ const parseJwt = (token) => {
     );
     return JSON.parse(jsonPayload);
   } catch (e) {
+    console.error('Error parsing JWT:', e);
     return null;
   }
 };
 
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
-    // For OPTIONS requests, set additional headers
-    if (config.method === 'options') {
-      config.headers['Access-Control-Request-Method'] = config.method.toUpperCase();
-      config.headers['Access-Control-Request-Headers'] = 'Content-Type, Authorization';
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
 // Response interceptor
@@ -67,8 +69,6 @@ export const authService = {
       if (data.acessToken || data.accessToken) {
         const token = data.acessToken || data.accessToken;
         
-        localStorage.setItem('token', token);
-        
         const tokenPayload = parseJwt(token);
         
         if (tokenPayload) {
@@ -79,7 +79,11 @@ export const authService = {
             name: tokenPayload.name
           };
           
-          localStorage.setItem('user', JSON.stringify(user));
+          console.log('Login successful:', {
+            user,
+            token,
+            tokenPayload
+          });
           
           return {
             success: true,
@@ -89,6 +93,7 @@ export const authService = {
         }
       }
       
+      console.error('Invalid token or missing token in response:', data);
       return {
         success: false,
         message: 'Erro de autenticação: token inválido ou ausente'
