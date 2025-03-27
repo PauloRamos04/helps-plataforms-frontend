@@ -1,10 +1,11 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { 
-  Box, Container, Typography, Paper, TextField, 
-  Button, Link, Alert, CircularProgress 
+import {
+  Box, Typography, Paper, TextField,
+  Button, Link, Alert, CircularProgress
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
+import alaresLogo from '../assets/alares.png';
 
 // Define validation functions directly in this component
 const validateRequired = (value, fieldName) => {
@@ -16,14 +17,14 @@ const validateRequired = (value, fieldName) => {
 
 const validateUsername = (value) => {
   if (!value) return '';
-  
+
   if (value.length < 3) {
     return 'Nome de usuário deve ter pelo menos 3 caracteres';
   }
   if (!/^[a-zA-Z0-9_]+$/.test(value)) {
     return 'Nome de usuário deve conter apenas letras, números e underscores';
   }
-  
+
   return '';
 };
 
@@ -51,7 +52,7 @@ function Login() {
       ...prev,
       [name]: value
     }));
-    
+
     // Clear the error for this field when the user changes it
     if (errors[name]) {
       setErrors(prev => ({
@@ -63,16 +64,16 @@ function Login() {
 
   const validate = () => {
     const newErrors = {};
-    
+
     // Username validation
-    const usernameError = validateRequired(formData.username, 'Nome de usuário') || 
-                          validateUsername(formData.username);
+    const usernameError = validateRequired(formData.username, 'Nome de usuário') ||
+      validateUsername(formData.username);
     if (usernameError) newErrors.username = usernameError;
-    
+
     // Password validation
     const passwordError = validateRequired(formData.password, 'Senha');
     if (passwordError) newErrors.password = passwordError;
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -80,23 +81,23 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoginError('');
-    
+
     if (!validate()) {
       return;
     }
-    
+
     try {
       setLoading(true);
-      
+
       // Create login request object as expected by the backend
       const loginRequest = {
         username: formData.username,
         password: formData.password
       };
-      
+
       // Send login request to backend
       const result = await login(loginRequest);
-      
+
       if (result.success) {
         navigate('/dashboard');
       } else {
@@ -111,60 +112,110 @@ function Login() {
   };
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
+    <Box sx={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
       minHeight: '100vh',
-      bgcolor: '#1a1a1a' // Dark background as in screenshot
+      bgcolor: '#121212',
+      backgroundImage: 'radial-gradient(circle at 50% 70%, rgba(73, 102, 242, 0.1), transparent 75%)',
     }}>
-      <Paper 
-        elevation={3} 
-        sx={{ 
-          width: '100%', 
+      <Paper
+        elevation={10}
+        sx={{
+          width: '100%',
           maxWidth: 400,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          p: 3
+          px: 5,
+          py: 6,
+          backgroundColor: 'rgba(255, 255, 255, 0.97)',
+          borderRadius: '16px',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+          overflow: 'hidden',
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '4px',
+            background: 'linear-gradient(90deg, #4966f2 0%, #8C52FF 100%)',
+          }
         }}
       >
         {/* Logo */}
-        <Box 
-          component="span"
-          sx={{ 
-            color: 'white', 
-            fontWeight: 'bold', 
-            fontSize: '18px',
-            bgcolor: '#4966f2', 
-            px: 1.5,
-            py: 0.3,
-            borderRadius: '4px',
-            mb: 3
+        <Box
+          sx={{
+            mb: 4,
+            display: 'flex',
+            justifyContent: 'center',
+            width: '100%',
           }}
         >
-          alares
-          <Box component="span" sx={{ ml: 0.5, fontSize: '16px' }}>➚</Box>
+          <Box
+            component="img"
+            src={alaresLogo}
+            alt="Alares Logo"
+            sx={{
+              height: 70, 
+              width: 'auto',
+              borderRadius: '8px',
+            }}
+          />
         </Box>
-        
+
         {/* Title "Ei, dá um Helps!" */}
-        <Box sx={{ mb: 3, textAlign: 'center' }}>
-          <Typography variant="h5" component="h1" sx={{ color: '#333', fontWeight: 'bold' }}>
+        <Box sx={{ mb: 4, textAlign: 'center' }}>
+          <Typography
+            variant="h4"
+            component="h1"
+            sx={{
+              fontWeight: 900,
+              color: '#303030',
+              mb: 0.5,
+              fontFamily: '"Poppins", "Roboto", sans-serif'
+            }}
+          >
             Ei, dá um
           </Typography>
-          <Typography variant="h5" component="h1" sx={{ color: '#4966f2', fontWeight: 'bold' }}>
+          <Typography
+            variant="h3"
+            component="h1"
+            sx={{
+              fontWeight: 900,
+              color: '#4966f2',
+              background: 'linear-gradient(45deg, #4966f2, #8C52FF)',
+              backgroundClip: 'text',
+              textFillColor: 'transparent',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              fontFamily: '"Poppins", "Roboto", sans-serif'
+            }}
+          >
             Helps!
           </Typography>
         </Box>
-        
+
         {/* Login Form */}
         <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
           {loginError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert
+              severity="error"
+              sx={{
+                mb: 3,
+                borderRadius: '10px',
+                '& .MuiAlert-icon': {
+                  color: '#ff3d71'
+                }
+              }}
+            >
               {loginError}
             </Alert>
           )}
-          
+
           {/* Username field */}
           <TextField
             fullWidth
@@ -173,18 +224,28 @@ function Login() {
             value={formData.username}
             onChange={handleChange}
             variant="outlined"
-            size="small"
-            sx={{ mb: 2 }}
             error={!!errors.username}
             helperText={errors.username}
-            InputProps={{
-              sx: {
-                borderRadius: '4px',
-                bgcolor: '#f5f5f5'
+            sx={{
+              mb: 3,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '10px',
+                backgroundColor: 'rgba(245, 245, 245, 0.9)',
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#4966f2',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#4966f2',
+                  borderWidth: '2px',
+                },
+              },
+              '& .MuiFormHelperText-root': {
+                margin: '4px 0 0 14px',
+                fontSize: '0.7rem',
               }
             }}
           />
-          
+
           {/* Password field */}
           <TextField
             fullWidth
@@ -194,33 +255,56 @@ function Login() {
             value={formData.password}
             onChange={handleChange}
             variant="outlined"
-            size="small"
-            sx={{ mb: 3 }}
             error={!!errors.password}
             helperText={errors.password}
-            InputProps={{
-              sx: {
-                borderRadius: '4px',
-                bgcolor: '#f5f5f5'
+            sx={{
+              mb: 4,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '10px',
+                backgroundColor: 'rgba(245, 245, 245, 0.9)',
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#4966f2',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#4966f2',
+                  borderWidth: '2px',
+                },
+              },
+              '& .MuiFormHelperText-root': {
+                margin: '4px 0 0 14px',
+                fontSize: '0.7rem',
               }
             }}
           />
-          
+
           {/* Login button */}
           <Button
             type="submit"
             fullWidth
             variant="contained"
-            sx={{ 
-              bgcolor: '#4966f2',
-              borderRadius: '4px',
-              textTransform: 'none',
-              py: 1
-            }}
             disabled={loading}
+            sx={{
+              py: 1.5,
+              background: 'linear-gradient(45deg, #4966f2, #8C52FF)',
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontSize: '1rem',
+              fontWeight: 600,
+              boxShadow: '0 4px 12px rgba(73, 102, 242, 0.3)',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                boxShadow: '0 6px 16px rgba(73, 102, 242, 0.4)',
+                transform: 'translateY(-2px)'
+              }
+            }}
           >
-            {loading ? <CircularProgress size={24} /> : 'Entrar'}
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Entrar'}
           </Button>
+
+          {/* Optional: Forgot password link */}
+          <Typography variant="body2" sx={{ mt: 3, color: '#666', textAlign: 'center' }}>
+            Esqueceu sua senha? <Box component="span" sx={{ color: '#4966f2', cursor: 'pointer', fontWeight: 500 }}>Recuperar acesso</Box>
+          </Typography>
         </Box>
       </Paper>
     </Box>
