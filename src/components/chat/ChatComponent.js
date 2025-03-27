@@ -5,20 +5,43 @@ import {
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import CloseIcon from '@mui/icons-material/Close';
 import AuthContext from '../../context/AuthContext';
 import { chamadoService } from '../../api/chamadoService';
 import websocketService from '../../api/websocketService';
 
-// Verificar se o serviço tem os métodos necessários
 const checkWebSocketService = () => {
   const requiredMethods = ['connect', 'subscribeToChamado', 'addUser', 'sendMessage', 'unsubscribeFromChamado'];
   const missingMethods = requiredMethods.filter(method => !websocketService[method] || typeof websocketService[method] !== 'function');
   
   if (missingMethods.length > 0) {
-    console.error('Métodos ausentes no websocketService:', missingMethods);
+    console.error('Missing methods in websocketService:', missingMethods);
     return false;
   }
   return true;
+};
+
+const MessageImage = ({ imagePath }) => {
+  if (!imagePath) return null;
+  
+  const imageUrl = chamadoService.getImageUrl(imagePath);
+  
+  return (
+    <Box sx={{ mt: 1, mb: 1 }}>
+      <img 
+        src={imageUrl} 
+        alt="Message attachment" 
+        style={{ 
+          maxWidth: '100%', 
+          maxHeight: '200px', 
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}
+        onClick={() => window.open(imageUrl, '_blank')}
+      />
+    </Box>
+  );
 };
 
 const ChatComponent = ({ chamadoId, chamadoStatus }) => {
@@ -33,6 +56,9 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const messagesEndRef = useRef(null);
   const pollingIntervalRef = useRef(null);
   const [isWebSocketEnabled, setIsWebSocketEnabled] = useState(checkWebSocketService());
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
 
   const isCurrentUserMessage = (message) => {
     const currentUserId = auth.user?.id;
@@ -102,7 +128,8 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
           timestamp: msg.dataEnvio,
           remetente: msg.remetente,
           conteudo: msg.conteudo,
-          dataEnvio: msg.dataEnvio
+          dataEnvio: msg.dataEnvio,
+          imagePath: msg.imagePath
         }));
         
         setMessages(formattedMessages);
@@ -132,8 +159,8 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
 
   const connectWebSocket = () => {
     if (!isWebSocketEnabled || !chamadoId) {
-      console.log('WebSocket desabilitado ou chamadoId não fornecido');
-      startPolling(); // Fallback para polling
+      console.log('WebSocket disabled or chamadoId not provided');
+      startPolling();
       return;
     }
     
@@ -143,10 +170,10 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     try {
       websocketService.connect(
         () => {
-          console.log('WebSocket conectado com sucesso');
+          console.log('WebSocket connected successfully');
           try {
             const success = websocketService.subscribeToChamado(chamadoId, (message) => {
-              console.log('Mensagem recebida via WebSocket:', message);
+              console.log('Message received via WebSocket:', message);
               if (message.type === 'CHAT') {
                 setMessages(prev => {
                   const exists = prev.some(m => m.id === message.id);
@@ -157,7 +184,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
             });
             
             if (success) {
-              console.log('Assinatura ao chamado bem-sucedida');
+              console.log('Subscription to chamado successful');
               try {
                 websocketService.addUser(chamadoId, {
                   type: 'JOIN',
@@ -167,36 +194,36 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
                   content: '',
                   timestamp: new Date().toISOString()
                 });
-                console.log('Usuário adicionado ao chat');
+                console.log('User added to chat');
               } catch (userError) {
-                console.error('Erro ao adicionar usuário ao chat:', userError);
+                console.error('Error adding user to chat:', userError);
               }
               
               setIsConnecting(false);
               startPolling();
             } else {
-              console.error('Falha ao assinar o canal do chat');
-              setError('Não foi possível se inscrever no canal do chat');
+              console.error('Failed to subscribe to chat channel');
+              setError('Could not subscribe to chat channel');
               setIsConnecting(false);
               startPolling();
             }
           } catch (subError) {
-            console.error('Erro ao tentar assinar o canal:', subError);
-            setError('Erro ao conectar ao chat, usando modo alternativo.');
+            console.error('Error trying to subscribe to channel:', subError);
+            setError('Error connecting to chat, using alternative mode.');
             setIsConnecting(false);
             startPolling();
           }
         },
         (error) => {
-          console.error('Erro na conexão WebSocket:', error);
-          setError('Usando modo alternativo para receber mensagens.');
+          console.error('WebSocket connection error:', error);
+          setError('Using alternative mode to receive messages.');
           setIsConnecting(false);
           startPolling();
         }
       );
     } catch (error) {
-      console.error('Erro ao iniciar conexão WebSocket:', error);
-      setError('Falha na conexão, usando modo alternativo para receber mensagens.');
+      console.error('Error starting WebSocket connection:', error);
+      setError('Connection failure, using alternative mode to receive messages.');
       setIsConnecting(false);
       startPolling();
     }
@@ -218,7 +245,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         try {
           websocketService.unsubscribeFromChamado(chamadoId);
         } catch (error) {
-          console.error('Erro ao cancelar assinatura do chat:', error);
+          console.error('Error unsubscribing from chat:', error);
         }
       }
       
@@ -236,7 +263,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!messageInput.trim()) return;
+    if ((!messageInput.trim() && !selectedImage) || isSending) return;
     
     setIsSending(true);
     
@@ -256,41 +283,55 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     const optimisticMessage = {
       ...messageObj,
       id: optimisticId,
-      _isOptimistic: true
+      _isOptimistic: true,
+      imagePath: selectedImage ? 'pending' : null
     };
     
     setMessages(prev => [...prev, optimisticMessage]);
     
     try {
       let success = false;
+      let response;
       
-      if (isWebSocketEnabled && websocketService.isConnected) {
+      if (selectedImage) {
+        const formData = new FormData();
+        formData.append('conteudo', currentMessage);
+        formData.append('image', selectedImage);
+        
+        response = await chamadoService.enviarMensagemComImagem(chamadoId, formData);
+        success = true;
+      } else if (isWebSocketEnabled && websocketService.isConnected) {
         try {
           success = websocketService.sendMessage(chamadoId, messageObj);
-          console.log('Mensagem enviada via WebSocket:', success);
+          console.log('Message sent via WebSocket:', success);
         } catch (wsError) {
-          console.error('Erro ao enviar mensagem via WebSocket:', wsError);
+          console.error('Error sending message via WebSocket:', wsError);
           success = false;
         }
       }
       
-      if (!success) {
-        console.log('Enviando mensagem via API');
+      if (!success && !selectedImage) {
+        console.log('Sending message via API');
         await chamadoService.enviarMensagem(chamadoId, { conteudo: currentMessage });
-        
-        setMessages(prev => prev.filter(m => m.id !== optimisticId));
-        
-        fetchMessages(true);
       }
+      
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
+      
+      fetchMessages(true);
+      
+      // Clear image selection
+      setSelectedImage(null);
+      setImagePreview(null);
+      
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
+      console.error('Error sending message:', error);
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
       
       setMessageInput(currentMessage);
       
       setNotification({
         open: true,
-        message: 'Não foi possível enviar a mensagem. Tente novamente.',
+        message: 'Could not send message. Please try again.',
         type: 'error'
       });
     } finally {
@@ -302,6 +343,45 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+  
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      setNotification({
+        open: true,
+        message: 'Only image files are allowed.',
+        type: 'error'
+      });
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      setNotification({
+        open: true,
+        message: 'File size should be less than 5MB.',
+        type: 'error'
+      });
+      return;
+    }
+    
+    setSelectedImage(file);
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+  
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -371,7 +451,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         </Typography>
         
         <span>
-          <Tooltip title="Atualizar mensagens">
+          <Tooltip title="Refresh messages">
             <span>
               <IconButton 
                 size="small" 
@@ -495,9 +575,21 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
                         </Typography>
                       </Box>
                       
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {message.content || message.conteudo}
-                      </Typography>
+                      {message.content && (
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {message.content || message.conteudo}
+                        </Typography>
+                      )}
+                      
+                      {message.imagePath && message.imagePath !== 'pending' && (
+                        <MessageImage imagePath={message.imagePath} />
+                      )}
+                      
+                      {message.imagePath === 'pending' && (
+                        <Box sx={{ mt: 1, mb: 1 }}>
+                          <CircularProgress size={24} />
+                        </Box>
+                      )}
                       
                       <Typography 
                         variant="caption" 
@@ -509,7 +601,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
                         }}
                       >
                         {formatTime(message.timestamp || message.dataEnvio)}
-                        {message._isOptimistic && ' (enviando...)'}
+                        {message._isOptimistic && ' (sending...)'}
                       </Typography>
                     </Box>
                   </Box>
@@ -528,11 +620,49 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
             }}
           >
             <Typography color="text.secondary">
-              Nenhuma mensagem ainda. Inicie a conversa!
+              No messages yet. Start the conversation!
             </Typography>
           </Box>
         )}
       </Box>
+      
+      {imagePreview && (
+        <Box sx={{ 
+          p: 2, 
+          borderTop: '1px solid #e0e0e0',
+          bgcolor: '#f5f5f5',
+          display: 'flex',
+          alignItems: 'center'
+        }}>
+          <Box sx={{ position: 'relative', mr: 2 }}>
+            <img 
+              src={imagePreview} 
+              alt="Selected" 
+              style={{ 
+                height: '60px', 
+                borderRadius: '4px' 
+              }} 
+            />
+            <IconButton 
+              size="small" 
+              onClick={handleRemoveImage}
+              sx={{ 
+                position: 'absolute',
+                top: -8,
+                right: -8,
+                bgcolor: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                '&:hover': { bgcolor: '#f5f5f5' }
+              }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <Typography variant="caption">
+            {selectedImage?.name}
+          </Typography>
+        </Box>
+      )}
       
       <Box 
         sx={{ 
@@ -547,13 +677,31 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
             gap: 1
           }}
         >
+          <input
+            type="file"
+            id="file-upload"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+            ref={fileInputRef}
+          />
+          
+          <IconButton
+            color="primary"
+            onClick={() => fileInputRef.current.click()}
+            disabled={isChatDisabled || isSending}
+            sx={{ bgcolor: 'white', borderRadius: '4px' }}
+          >
+            <AttachFileIcon />
+          </IconButton>
+          
           <TextField
             fullWidth
             multiline
             maxRows={3}
             placeholder={isChatDisabled 
-              ? "Chat disponível apenas para chamados em atendimento" 
-              : "Digite sua mensagem..."}
+              ? "Chat only available for tickets in progress" 
+              : "Type your message..."}
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}
@@ -573,14 +721,14 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
             color="primary"
             endIcon={isSending ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
             onClick={handleSendMessage}
-            disabled={isChatDisabled || !messageInput.trim() || isSending}
+            disabled={isChatDisabled || (!messageInput.trim() && !selectedImage) || isSending}
             sx={{ 
               borderRadius: '4px',
               textTransform: 'none',
               minWidth: '100px'
             }}
           >
-            {isSending ? 'Enviando' : 'Enviar'}
+            {isSending ? 'Sending' : 'Send'}
           </Button>
         </Box>
         
@@ -593,7 +741,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
               mt: 1
             }}
           >
-            O chat só está disponível para chamados em atendimento
+            Chat is only available for tickets in progress
           </Typography>
         )}
       </Box>

@@ -1,13 +1,14 @@
-// src/pages/ChamadoDetail.js
 import React, { useEffect, useState, useContext } from 'react';
 import {
   Box, Typography, Paper, Button, Grid, Chip, 
-  CircularProgress, Alert, Divider, Snackbar
+  CircularProgress, Alert, Divider, Snackbar,
+  Card, CardContent, Dialog, DialogContent
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { chamadoService } from '../api/chamadoService';
 import ChatComponent from '../components/chat/ChatComponent';
 import AuthContext from '../context/AuthContext';
+import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
 
 function ChamadoDetail() {
   const { id } = useParams();
@@ -23,6 +24,7 @@ function ChamadoDetail() {
     message: '',
     severity: 'info'
   });
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchChamado();
@@ -32,33 +34,29 @@ function ChamadoDetail() {
     try {
       setLoading(true);
       setError(null);
-      console.log('Buscando dados do chamado ID:', id);
+      console.log('Fetching ticket data ID:', id);
       const data = await chamadoService.getChamadoById(id);
-      console.log('Dados do chamado recebidos:', data);
+      console.log('Ticket data received:', data);
       setChamado(data);
       if (data.helper && data.helper.username) {
         setSelectedHelper(data.helper.username);
       }
     } catch (error) {
-      console.error('Erro ao carregar detalhes do chamado:', error);
-      setError('Não foi possível carregar os detalhes do chamado. Por favor, tente novamente.');
+      console.error('Error loading ticket details:', error);
+      setError('Could not load ticket details. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Function to adhere to a chamado - UPDATED
   const handleAderir = async () => {
     try {
       setActionInProgress(true);
-      console.log('Tentando aderir ao chamado:', id);
-      console.log('Status atual do chamado antes de aderir:', chamado.status);
       
-      // Check if chamado is in the correct state
       if (chamado.status !== 'ABERTO') {
         setNotification({
           open: true,
-          message: `Não é possível aderir a um chamado com status ${chamado.status}`,
+          message: `Cannot take a ticket with status ${chamado.status}`,
           severity: 'warning'
         });
         setActionInProgress(false);
@@ -66,19 +64,18 @@ function ChamadoDetail() {
       }
       
       await chamadoService.aderirChamado(id);
-      await fetchChamado(); // Recarrega o chamado após aderir
+      await fetchChamado();
       
       setNotification({
         open: true,
-        message: 'Você aderiu ao chamado com sucesso!',
+        message: 'You have successfully taken the ticket!',
         severity: 'success'
       });
     } catch (error) {
-      console.error('Erro ao aderir ao chamado:', error);
+      console.error('Error taking ticket:', error);
       
-      // Extract the error message from the response if available
       const errorMessage = error.response?.data?.message || 
-                          'Não foi possível aderir ao chamado. Verifique se o status está correto.';
+                          'Could not take the ticket. Check if the status is correct.';
       
       setNotification({
         open: true,
@@ -93,19 +90,18 @@ function ChamadoDetail() {
   const handleFinalizar = async () => {
     try {
       setActionInProgress(true);
-      console.log('Tentando finalizar chamado:', id);
       await chamadoService.finalizarChamado(id);
-      await fetchChamado(); // Recarrega o chamado após finalizar
+      await fetchChamado();
       setNotification({
         open: true,
-        message: 'Chamado finalizado com sucesso!',
+        message: 'Ticket finalized successfully!',
         severity: 'success'
       });
     } catch (error) {
-      console.error('Erro ao finalizar chamado:', error);
+      console.error('Error finalizing ticket:', error);
       setNotification({
         open: true,
-        message: 'Não foi possível finalizar o chamado. Tente novamente.',
+        message: 'Could not finalize the ticket. Try again.',
         severity: 'error'
       });
     } finally {
@@ -142,7 +138,6 @@ function ChamadoDetail() {
     });
   };
 
-  // Verificar se o usuário atual é um helper ou admin
   const isHelperOrAdmin = () => {
     if (!auth || !auth.user || !auth.user.roles) return false;
     
@@ -152,6 +147,14 @@ function ChamadoDetail() {
       role === 'ROLE_HELPER' || 
       role === 'ROLE_ADMIN'
     );
+  };
+  
+  const handleOpenImageDialog = () => {
+    setImageDialogOpen(true);
+  };
+  
+  const handleCloseImageDialog = () => {
+    setImageDialogOpen(false);
   };
 
   if (loading) {
@@ -171,7 +174,7 @@ function ChamadoDetail() {
           onClick={() => navigate('/chamados')}
           sx={{ mt: 2, color: '#4966f2' }}
         >
-          Voltar para lista de chamados
+          Back to tickets list
         </Button>
       </Box>
     );
@@ -180,19 +183,20 @@ function ChamadoDetail() {
   if (!chamado) {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="warning">Chamado não encontrado.</Alert>
+        <Alert severity="warning">Ticket not found.</Alert>
         <Button 
           variant="text" 
           onClick={() => navigate('/chamados')}
           sx={{ mt: 2, color: '#4966f2' }}
         >
-          Voltar para lista de chamados
+          Back to tickets list
         </Button>
       </Box>
     );
   }
 
   const statusColor = getStatusColor(chamado.status);
+  const imageUrl = chamado.imagePath ? chamadoService.getImageUrl(chamado.imagePath) : null;
 
   return (
     <Box sx={{ p: 3 }}>
@@ -204,59 +208,135 @@ function ChamadoDetail() {
           mb: 3
         }}
       >
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" component="h1" sx={{ fontWeight: 'medium' }}>
-                {chamado.titulo}
-              </Typography>
-              
-              <Chip 
-                label={chamado.status?.replace('_', ' ') || 'ABERTO'}
-                sx={{ 
-                  bgcolor: statusColor.bg, 
-                  color: statusColor.color,
-                  fontWeight: 'medium',
-                }}
-              />
-            </Box>
+        {/* Ticket Header */}
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold' }}>
+              {chamado.titulo}
+            </Typography>
             
-            <Box sx={{ display: 'flex', mb: 2 }}>
-              <Typography sx={{ color: '#666', mr: 1 }}>
-                {`${chamado.usuario?.name || chamado.usuario?.username || 'Usuário'}`}
-              </Typography>
-              <Typography sx={{ color: '#999', fontSize: '14px' }}>
-                (criou esta solicitação em {formatDate(chamado.dataAbertura)})
-              </Typography>
-            </Box>
-          </Grid>
-
-          <Grid item xs={8}>
-            <Box 
+            <Chip 
+              label={chamado.status?.replace('_', ' ') || 'OPEN'}
               sx={{ 
-                p: 3, 
-                bgcolor: '#f5f5f5', 
-                borderRadius: '4px',
-                mb: 3,
-                minHeight: '150px'
+                bgcolor: statusColor.bg, 
+                color: statusColor.color,
+                fontWeight: 'medium',
+                fontSize: '0.875rem',
+                py: 0.5,
+                px: 1
               }}
-            >
-              <Typography sx={{ whiteSpace: 'pre-wrap' }}>
-                {chamado.descricao}
-              </Typography>
-            </Box>
+            />
+          </Box>
+          
+          <Box sx={{ display: 'flex', mb: 1 }}>
+            <Typography sx={{ color: '#666', mr: 1 }}>
+              <strong>Created by:</strong> {chamado.usuario?.name || chamado.usuario?.username || 'User'}
+            </Typography>
+            <Typography sx={{ color: '#666', fontSize: '14px' }}>
+              on {formatDate(chamado.dataAbertura)}
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+            <Chip 
+              label={`Category: ${chamado.categoria}`} 
+              variant="outlined" 
+              size="small" 
+              sx={{ bgcolor: '#f0f0f0' }} 
+            />
+            <Chip 
+              label={`Type: ${chamado.tipo}`} 
+              variant="outlined" 
+              size="small" 
+              sx={{ bgcolor: '#f0f0f0' }} 
+            />
+          </Box>
+        </Box>
+
+        <Grid container spacing={3}>
+          {/* Left Column: Ticket Details, Image and Chat */}
+          <Grid item xs={12} md={8}>
+            {/* Ticket Description Card */}
+            <Card variant="outlined" sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
+                  Description
+                </Typography>
+                
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    whiteSpace: 'pre-wrap', 
+                    mb: imageUrl ? 3 : 0,
+                    color: '#333' 
+                  }}
+                >
+                  {chamado.descricao}
+                </Typography>
+                
+                {imageUrl && (
+                  <Box sx={{ mt: 3, textAlign: 'center', position: 'relative' }}>
+                    <Box 
+                      sx={{ 
+                        position: 'relative', 
+                        display: 'inline-block',
+                        maxWidth: '100%',
+                        '&:hover .zoom-icon': {
+                          opacity: 1
+                        }
+                      }}
+                    >
+                      <img 
+                        src={imageUrl} 
+                        alt="Ticket attachment" 
+                        style={{ 
+                          maxWidth: '100%', 
+                          maxHeight: '300px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        }}
+                        onClick={handleOpenImageDialog}
+                      />
+                      <Box 
+                        className="zoom-icon"
+                        sx={{ 
+                          position: 'absolute', 
+                          top: '8px', 
+                          right: '8px',
+                          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                          borderRadius: '50%',
+                          padding: '4px',
+                          cursor: 'pointer',
+                          opacity: 0,
+                          transition: 'opacity 0.2s ease-in-out'
+                        }}
+                        onClick={handleOpenImageDialog}
+                      >
+                        <ZoomOutMapIcon fontSize="small" />
+                      </Box>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      Click to enlarge image
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
 
             <Divider sx={{ my: 3 }} />
 
+            {/* Chat Section */}
             <Box sx={{ width: '100%', mb: 3 }}>
-              <Typography variant="subtitle1" sx={{ mb: 2 }}>
+              <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
                 Chat
               </Typography>
               <ChatComponent chamadoId={parseInt(id)} chamadoStatus={chamado.status} />
             </Box>
           </Grid>
 
-          <Grid item xs={4}>
+          {/* Right Column: Status, Helper, Actions */}
+          <Grid item xs={12} md={4}>
             <Paper 
               elevation={0} 
               sx={{ 
@@ -265,42 +345,75 @@ function ChamadoDetail() {
                 border: '1px solid #e0e0e0'
               }}
             >
-              <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                Status
+              <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
+                Ticket Information
               </Typography>
-              <Chip 
-                label={chamado.status?.replace('_', ' ') || 'ABERTO'}
-                sx={{ 
-                  bgcolor: statusColor.bg, 
-                  color: statusColor.color,
-                  fontWeight: 'medium',
-                  mb: 2
-                }}
-              />
+              
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Status
+                </Typography>
+                <Chip 
+                  label={chamado.status?.replace('_', ' ') || 'OPEN'}
+                  sx={{ 
+                    bgcolor: statusColor.bg, 
+                    color: statusColor.color,
+                    fontWeight: 'medium',
+                    width: '100%',
+                    justifyContent: 'left'
+                  }}
+                />
+              </Box>
 
               <Divider sx={{ my: 2 }} />
 
-              <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                Helper Vinculado
-              </Typography>
-
-              {chamado.helper ? (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                    {chamado.helper.name || chamado.helper.username}
-                  </Typography>
-                  <Typography variant="caption" color="textSecondary">
-                    {chamado.dataInicio ? `Atendendo desde ${formatDate(chamado.dataInicio)}` : ''}
-                  </Typography>
-                </Box>
-              ) : (
-                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                  Nenhum helper vinculado
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Assigned Helper
                 </Typography>
-              )}
+                
+                {chamado.helper ? (
+                  <Box sx={{ mb: 2 }}>
+                    <Box 
+                      sx={{ 
+                        p: 2, 
+                        border: '1px solid #e0e0e0', 
+                        borderRadius: '4px',
+                        bgcolor: '#f9f9f9'
+                      }}
+                    >
+                      <Typography variant="body1" sx={{ fontWeight: 'medium', mb: 0.5 }}>
+                        {chamado.helper.name || chamado.helper.username}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {chamado.dataInicio ? `Attending since ${formatDate(chamado.dataInicio)}` : ''}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box 
+                    sx={{ 
+                      p: 2, 
+                      border: '1px dashed #bdbdbd', 
+                      borderRadius: '4px',
+                      bgcolor: '#fafafa',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <Typography variant="body2" color="text.secondary">
+                      No helper assigned
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
 
               <Box sx={{ mt: 3 }}>
-                {/* Botão de aderir ao chamado - apenas para helpers/admins e apenas para chamados ABERTOS */}
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Actions
+                </Typography>
+                
                 {isHelperOrAdmin() && chamado.status === 'ABERTO' && (
                   <Button
                     fullWidth
@@ -311,14 +424,14 @@ function ChamadoDetail() {
                       bgcolor: '#4966f2',
                       borderRadius: '4px',
                       textTransform: 'none',
-                      mb: 2
+                      mb: 2,
+                      py: 1
                     }}
                   >
-                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Aderir ao Chamado'}
+                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Take This Ticket'}
                   </Button>
                 )}
 
-                {/* Botão de finalizar chamado - apenas para o helper vinculado e apenas para chamados EM_ATENDIMENTO */}
                 {isHelperOrAdmin() && chamado.status === 'EM_ATENDIMENTO' && (
                   <Button
                     fullWidth
@@ -329,10 +442,11 @@ function ChamadoDetail() {
                       bgcolor: '#4CAF50',
                       borderRadius: '4px',
                       textTransform: 'none',
-                      mb: 2
+                      mb: 2,
+                      py: 1
                     }}
                   >
-                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Finalizar'}
+                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Finalize Ticket'}
                   </Button>
                 )}
 
@@ -344,16 +458,64 @@ function ChamadoDetail() {
                     borderColor: '#e0e0e0',
                     color: '#666',
                     borderRadius: '4px',
-                    textTransform: 'none'
+                    textTransform: 'none',
+                    py: 1
                   }}
                 >
-                  Voltar para a lista
+                  Back to list
                 </Button>
               </Box>
             </Paper>
           </Grid>
         </Grid>
       </Paper>
+
+      {/* Image Dialog */}
+      <Dialog 
+        open={imageDialogOpen} 
+        onClose={handleCloseImageDialog}
+        maxWidth="lg"
+      >
+        <DialogContent 
+          sx={{ 
+            p: 1, 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            bgcolor: '#000',
+            position: 'relative'
+          }}
+        >
+          {imageUrl && (
+            <>
+              <img 
+                src={imageUrl} 
+                alt="Ticket attachment" 
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: '80vh',
+                  objectFit: 'contain'
+                }}
+              />
+              <Button 
+                variant="contained" 
+                sx={{ 
+                  position: 'absolute', 
+                  bottom: 16, 
+                  right: 16,
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  '&:hover': {
+                    bgcolor: 'rgba(0,0,0,0.7)'
+                  }
+                }}
+                onClick={handleCloseImageDialog}
+              >
+                Close
+              </Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Notification Snackbar */}
       <Snackbar

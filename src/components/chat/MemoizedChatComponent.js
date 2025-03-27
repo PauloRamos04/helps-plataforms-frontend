@@ -1,17 +1,25 @@
 import React, { useState, useEffect, useRef, useContext, useMemo, useCallback } from 'react';
 import {
-  Box, Typography, TextField, Button, Paper, Avatar,
-  CircularProgress, IconButton, Tooltip, Snackbar, Alert
+  Box, Typography, TextField, Button, Paper, Avatar, IconButton, 
+  CircularProgress, Tooltip, Snackbar, Alert, Badge, Menu, MenuItem
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import ImageIcon from '@mui/icons-material/Image';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import CloseIcon from '@mui/icons-material/Close';
+import { throttle } from 'lodash';
 import AuthContext from '../../context/AuthContext';
 import { chamadoService } from '../../api/chamadoService';
 import websocketService from '../../api/websocketService';
+import AttachmentPreview from '../attachments/AttachmentPreview';
 
 // Componente de mensagem individual - memoizado para melhorar performance
-const ChatMessage = React.memo(({ message, colorScheme, formatTime, getInitial, getUserRole }) => {
+const ChatMessage = React.memo(({ message, formatTime, getInitial, getUserRole }) => {
   const isSentByCurrentUser = message.isSentByCurrentUser;
+  const colorScheme = message.colorScheme;
   const userRole = getUserRole(message);
   
   return (
@@ -97,6 +105,19 @@ const ChatMessage = React.memo(({ message, colorScheme, formatTime, getInitial, 
             {message.content || message.conteudo}
           </Typography>
           
+          {/* Renderizar anexos, se houver */}
+          {message.attachments && message.attachments.length > 0 && (
+            <Box sx={{ mt: 1 }}>
+              {message.attachments.map((attachment, idx) => (
+                <AttachmentPreview 
+                  key={`${message.id}-attachment-${idx}`}
+                  attachment={attachment}
+                  size="small"
+                />
+              ))}
+            </Box>
+          )}
+          
           <Typography 
             variant="caption" 
             sx={{ 
@@ -116,7 +137,7 @@ const ChatMessage = React.memo(({ message, colorScheme, formatTime, getInitial, 
 });
 
 // Componente principal do chat - com otimizações de performance
-const ChatComponent = ({ chamadoId, chamadoStatus }) => {
+const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
   const { auth } = useContext(AuthContext);
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
@@ -128,6 +149,10 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const messagesEndRef = useRef(null);
   const pollingIntervalRef = useRef(null);
   const [isWebSocketEnabled, setIsWebSocketEnabled] = useState(true);
+  const fileInputRef = useRef(null);
+  const [attachments, setAttachments] = useState([]);
+  const [attachmentMenuAnchor, setAttachmentMenuAnchor] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Funções memoizadas para evitar re-renders desnecessários
   const isCurrentUserMessage = useCallback((message) => {
@@ -147,11 +172,11 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       };
     } else {
       const isHelper = message.remetente?.roles?.some(
-        role => role.name === 'HELPER' || role.name === 'ROLE_HELPER'
+        role => role === 'HELPER' || role === 'ROLE_HELPER'
       );
       
       const isAdmin = message.remetente?.roles?.some(
-        role => role.name === 'ADMIN' || role.name === 'ROLE_ADMIN'
+        role => role === 'ADMIN' || role === 'ROLE_ADMIN'
       );
       
       if (isAdmin) {
@@ -194,55 +219,59 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     
     const roles = message.remetente.roles;
     
-    if (roles.some(role => role.name === 'ADMIN' || role.name === 'ROLE_ADMIN')) {
+    if (roles.some(role => role === 'ADMIN' || role === 'ROLE_ADMIN')) {
       return "Admin";
-    } else if (roles.some(role => role.name === 'HELPER' || role.name === 'ROLE_HELPER')) {
+    } else if (roles.some(role => role === 'HELPER' || role === 'ROLE_HELPER')) {
       return "Helper";
     }
     
     return null;
   }, []);
 
-  // Fetch mensagens com otimização para evitar re-renders
-  const fetchMessages = useCallback(async (silent = false) => {
-    if (!chamadoId) return;
-    
-    try {
-      if (!silent) {
-        setIsLoading(true);
-      }
+  // Throttle para evitar múltiplas chamadas de fetch
+  const throttledFetchMessages = useCallback(
+    throttle(async (silent = false) => {
+      if (!chamadoId) return;
       
-      const data = await chamadoService.getMensagens(chamadoId);
-      
-      if (data && Array.isArray(data)) {
-        const formattedMessages = data.map(msg => ({
-          id: msg.id,
-          type: 'CHAT',
-          chamadoId: chamadoId,
-          senderId: msg.remetente?.id,
-          senderName: msg.remetente?.name || msg.remetente?.username || 'Usuário',
-          content: msg.conteudo,
-          timestamp: msg.dataEnvio,
-          remetente: msg.remetente,
-          conteudo: msg.conteudo,
-          dataEnvio: msg.dataEnvio,
-          isSentByCurrentUser: msg.remetente?.id === auth.user?.id
-        }));
+      try {
+        if (!silent) {
+          setIsLoading(true);
+        }
         
-        setMessages(formattedMessages);
-      } else {
-        setMessages([]);
+        const data = await chamadoService.getMensagens(chamadoId);
+        
+        if (data && Array.isArray(data)) {
+          const formattedMessages = data.map(msg => ({
+            id: msg.id,
+            type: 'CHAT',
+            chamadoId: chamadoId,
+            senderId: msg.remetente?.id,
+            senderName: msg.remetente?.name || msg.remetente?.username || 'Usuário',
+            content: msg.conteudo,
+            timestamp: msg.dataEnvio,
+            remetente: msg.remetente,
+            conteudo: msg.conteudo,
+            dataEnvio: msg.dataEnvio,
+            isSentByCurrentUser: msg.remetente?.id === auth.user?.id,
+            attachments: msg.anexos || []
+          }));
+          
+          setMessages(formattedMessages);
+        } else {
+          setMessages([]);
+        }
+      } catch (err) {
+        if (!silent) {
+          setError('Não foi possível carregar as mensagens. Tente novamente.');
+        }
+      } finally {
+        if (!silent) {
+          setIsLoading(false);
+        }
       }
-    } catch (err) {
-      if (!silent) {
-        setError('Não foi possível carregar as mensagens. Tente novamente.');
-      }
-    } finally {
-      if (!silent) {
-        setIsLoading(false);
-      }
-    }
-  }, [chamadoId, auth.user?.id]);
+    }, 1000),
+    [chamadoId, auth.user?.id]
+  );
 
   // Usar startPolling com useCallback para evitar re-criações
   const startPolling = useCallback(() => {
@@ -251,9 +280,9 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     }
     
     pollingIntervalRef.current = setInterval(() => {
-      fetchMessages(true);
-    }, 5000);
-  }, [fetchMessages]);
+      throttledFetchMessages(true);
+    }, 10000);
+  }, [throttledFetchMessages]);
 
   // Criar connectWebSocket com useCallback
   const connectWebSocket = useCallback(() => {
@@ -280,7 +309,11 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
                   
                   const newMessage = {
                     ...message,
-                    isSentByCurrentUser: message.senderId === auth.user?.id
+                    isSentByCurrentUser: message.senderId === auth.user?.id,
+                    colorScheme: getUserColorScheme({
+                      ...message,
+                      remetente: { id: message.senderId }
+                    })
                   };
                   
                   return [...prev, newMessage];
@@ -332,13 +365,13 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       setIsConnecting(false);
       startPolling();
     }
-  }, [chamadoId, auth.user?.id, auth.user?.name, auth.user?.username, isWebSocketEnabled, startPolling]);
+  }, [chamadoId, auth.user?.id, auth.user?.name, auth.user?.username, isWebSocketEnabled, startPolling, getUserColorScheme]);
 
   // Setup inicial com useEffect
   useEffect(() => {
     if (!chamadoId) return;
     
-    fetchMessages();
+    throttledFetchMessages();
     
     if (isWebSocketEnabled) {
       connectWebSocket();
@@ -360,7 +393,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         pollingIntervalRef.current = null;
       }
     };
-  }, [chamadoId, fetchMessages, connectWebSocket, startPolling, isWebSocketEnabled]);
+  }, [chamadoId, throttledFetchMessages, connectWebSocket, startPolling, isWebSocketEnabled]);
 
   // Scroll para a última mensagem
   useEffect(() => {
@@ -378,38 +411,97 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     }));
   }, [messages, isCurrentUserMessage, getUserColorScheme]);
 
+  // Gerenciamento de anexos
+  const handleAttachmentClick = (event) => {
+    setAttachmentMenuAnchor(event.currentTarget);
+  };
+
+  const handleAttachmentMenuClose = () => {
+    setAttachmentMenuAnchor(null);
+  };
+
+  const handleFileInputChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    
+    // Verificar tamanho dos arquivos (limite de 5MB por arquivo)
+    const oversizedFiles = files.filter(file => file.size > 5 * 1024 * 1024);
+    if (oversizedFiles.length > 0) {
+      setNotification({
+        open: true,
+        message: `Arquivos muito grandes (limite de 5MB): ${oversizedFiles.map(f => f.name).join(', ')}`,
+        type: 'error'
+      });
+      return;
+    }
+    
+    // Adicionar aos anexos atuais
+    setAttachments(prev => [...prev, ...files]);
+    
+    // Resetar input para permitir selecionar o mesmo arquivo novamente
+    e.target.value = '';
+  };
+
+  const handleRemoveAttachment = (index) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Função de envio de mensagem otimizada com useCallback
   const handleSendMessage = useCallback(async () => {
-    if (!messageInput.trim()) return;
+    if (!messageInput.trim() && attachments.length === 0) return;
     
     setIsSending(true);
     
+    // Criar ID temporário para mensagem otimista
+    const optimisticId = `temp-${Date.now()}`;
+    
+    // Texto da mensagem atual
+    const currentMessage = messageInput;
+    setMessageInput('');
+    
+    // Criar objeto de mensagem
     const messageObj = {
       type: 'CHAT',
       chamadoId: chamadoId,
       senderId: auth.user?.id,
       senderName: auth.user?.name || auth.user?.username || 'Usuário',
-      content: messageInput,
+      content: currentMessage,
       timestamp: new Date().toISOString()
     };
     
-    const currentMessage = messageInput;
-    setMessageInput('');
+    // Criar cópias dos anexos para a mensagem otimista
+    const currentAttachments = [...attachments];
     
-    const optimisticId = `temp-${Date.now()}`;
+    // Mostrar anexos na mensagem otimista
+    const optimisticAttachments = currentAttachments.map((file, index) => ({
+      id: `temp-attachment-${index}`,
+      fileName: file.name,
+      contentType: file.type,
+      size: file.size,
+      isImage: file.type.startsWith('image/'),
+      url: URL.createObjectURL(file)
+    }));
+    
+    // Limpar anexos atuais
+    setAttachments([]);
+    
+    // Criar mensagem otimista para mostrar imediatamente
     const optimisticMessage = {
       ...messageObj,
       id: optimisticId,
       _isOptimistic: true,
-      isSentByCurrentUser: true
+      isSentByCurrentUser: true,
+      attachments: optimisticAttachments
     };
     
+    // Adicionar mensagem otimista à lista
     setMessages(prev => [...prev, optimisticMessage]);
     
     try {
       let success = false;
       
-      if (isWebSocketEnabled && websocketService.isConnected) {
+      // Tentar enviar via WebSocket (apenas mensagem de texto, sem anexos)
+      if (isWebSocketEnabled && websocketService.isConnected && currentAttachments.length === 0) {
         try {
           success = websocketService.sendMessage(chamadoId, messageObj);
           console.log('Mensagem enviada via WebSocket:', success);
@@ -419,20 +511,39 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         }
       }
       
-      if (!success) {
+      // Se falhar ou tiver anexos, enviar via API
+      if (!success || currentAttachments.length > 0) {
         console.log('Enviando mensagem via API');
-        await chamadoService.enviarMensagem(chamadoId, { conteudo: currentMessage });
         
+        // Criar FormData para envio da mensagem com anexos
+        const formData = new FormData();
+        formData.append('conteudo', currentMessage);
+        
+        // Adicionar anexos ao FormData
+        currentAttachments.forEach(file => {
+          formData.append('anexos', file);
+        });
+        
+        // Enviar para a API
+        await chamadoService.enviarMensagemComAnexos(chamadoId, formData);
+        
+        // Remover mensagem otimista
         setMessages(prev => prev.filter(m => m.id !== optimisticId));
         
-        fetchMessages(true);
+        // Atualizar mensagens
+        throttledFetchMessages(true);
       }
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      
+      // Remover mensagem otimista em caso de erro
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
       
+      // Restaurar input e anexos
       setMessageInput(currentMessage);
+      setAttachments(currentAttachments);
       
+      // Exibir notificação de erro
       setNotification({
         open: true,
         message: 'Não foi possível enviar a mensagem. Tente novamente.',
@@ -441,7 +552,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     } finally {
       setIsSending(false);
     }
-  }, [messageInput, chamadoId, auth.user?.id, auth.user?.name, auth.user?.username, fetchMessages, isWebSocketEnabled]);
+  }, [messageInput, chamadoId, auth.user?.id, auth.user?.name, auth.user?.username, throttledFetchMessages, isWebSocketEnabled, attachments]);
 
   // Handler para tecla Enter otimizado
   const handleKeyPress = useCallback((e) => {
@@ -458,15 +569,45 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
 
   // Handler para atualizar mensagens
   const handleRefreshMessages = useCallback(() => {
-    fetchMessages();
+    throttledFetchMessages();
 
     if (isWebSocketEnabled && !websocketService.isConnected) {
       connectWebSocket();
     }
-  }, [fetchMessages, connectWebSocket, isWebSocketEnabled]);
+  }, [throttledFetchMessages, connectWebSocket, isWebSocketEnabled]);
 
   // Verificar se o chat está desativado
   const isChatDisabled = chamadoStatus !== 'EM_ATENDIMENTO';
+
+  // Iniciar upload de diferentes tipos
+  const handleUploadPhoto = useCallback(() => {
+    fileInputRef.current.accept = 'image/*';
+    fileInputRef.current.click();
+    handleAttachmentMenuClose();
+  }, []);
+
+  const handleUploadDocument = useCallback(() => {
+    fileInputRef.current.accept = '.pdf,.doc,.docx,.txt,.xlsx,.xls';
+    fileInputRef.current.click();
+    handleAttachmentMenuClose();
+  }, []);
+
+  const handleUploadAny = useCallback(() => {
+    fileInputRef.current.accept = '*/*';
+    fileInputRef.current.click();
+    handleAttachmentMenuClose();
+  }, []);
+
+  // Helper para determinar o ícone correto para o anexo
+  const getAttachmentIcon = useCallback((file) => {
+    if (file.type.startsWith('image/')) {
+      return <ImageIcon />;
+    } else if (file.type === 'application/pdf') {
+      return <PictureAsPdfIcon />;
+    } else {
+      return <InsertDriveFileIcon />;
+    }
+  }, []);
 
   return (
     <Paper
@@ -537,7 +678,6 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
               <ChatMessage
                 key={message.id || `msg-${message.timestamp}`}
                 message={message}
-                colorScheme={getUserColorScheme(message)}
                 formatTime={formatTime}
                 getInitial={getInitial}
                 getUserRole={getUserRole}
@@ -561,6 +701,50 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         )}
       </Box>
       
+      {/* Seção de anexos selecionados */}
+      {attachments.length > 0 && (
+        <Box 
+          sx={{ 
+            p: 1, 
+            borderTop: '1px solid #e0e0e0',
+            bgcolor: '#f0f0f0',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1
+          }}
+        >
+          {attachments.map((file, index) => (
+            <Box 
+              key={index}
+              sx={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                bgcolor: 'white',
+                border: '1px solid #e0e0e0',
+                borderRadius: '4px',
+                p: 0.5,
+                pl: 1,
+                maxWidth: '200px'
+              }}
+            >
+              {getAttachmentIcon(file)}
+              <Typography variant="caption" sx={{ ml: 0.5, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {file.name}
+              </Typography>
+              <IconButton 
+                size="small" 
+                onClick={() => handleRemoveAttachment(index)}
+                sx={{ p: 0.5, ml: 0.5 }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          ))}
+        </Box>
+      )}
+      
+      {/* Área de input do chat */}
       <Box 
         sx={{ 
           p: 2, 
@@ -595,12 +779,54 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
             }}
           />
           
+          {/* Botão de anexo */}
+          <Tooltip title="Anexar arquivo">
+            <span>
+              <IconButton
+                color="primary"
+                onClick={handleAttachmentClick}
+                disabled={isChatDisabled || isSending}
+                sx={{ bgcolor: 'white', border: '1px solid #e0e0e0' }}
+              >
+                <Badge badgeContent={attachments.length} color="primary" invisible={attachments.length === 0}>
+                  <AttachFileIcon />
+                </Badge>
+              </IconButton>
+            </span>
+          </Tooltip>
+          
+          {/* Menu de tipos de anexo */}
+          <Menu
+            anchorEl={attachmentMenuAnchor}
+            open={Boolean(attachmentMenuAnchor)}
+            onClose={handleAttachmentMenuClose}
+          >
+            <MenuItem onClick={handleUploadPhoto}>
+              <ImageIcon sx={{ mr: 1 }} /> Imagem
+            </MenuItem>
+            <MenuItem onClick={handleUploadDocument}>
+              <PictureAsPdfIcon sx={{ mr: 1 }} /> Documento
+            </MenuItem>
+            <MenuItem onClick={handleUploadAny}>
+              <InsertDriveFileIcon sx={{ mr: 1 }} /> Qualquer arquivo
+            </MenuItem>
+          </Menu>
+          
+          {/* Input file oculto */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileInputChange}
+            style={{ display: 'none' }}
+            multiple
+          />
+          
           <Button
             variant="contained"
             color="primary"
             endIcon={isSending ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
             onClick={handleSendMessage}
-            disabled={isChatDisabled || !messageInput.trim() || isSending}
+            disabled={isChatDisabled || (!messageInput.trim() && attachments.length === 0) || isSending}
             sx={{ 
               borderRadius: '4px',
               textTransform: 'none',
@@ -644,4 +870,4 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   );
 };
 
-export default React.memo(ChatComponent);
+export default React.memo(MemoizedChatComponent);

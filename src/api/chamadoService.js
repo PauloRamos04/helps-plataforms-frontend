@@ -28,6 +28,19 @@ export const chamadoService = {
     }
   },
   
+  createChamadoWithImage: async (formData) => {
+    try {
+      const response = await api.post('/chamados/with-image', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+  
   updateChamado: async (id, chamadoData) => {
     try {
       const response = await api.put(`/chamados/${id}`, chamadoData);
@@ -72,6 +85,19 @@ export const chamadoService = {
     }
   },
   
+  enviarMensagemComImagem: async (id, formData) => {
+    try {
+      const response = await api.post(`/chamados/${id}/mensagens/with-image`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+  
   getMensagens: async (id) => {
     try {
       const response = await api.get(`/chamados/${id}/mensagens`);
@@ -83,11 +109,17 @@ export const chamadoService = {
   
   getChatHistory: async (id) => {
     try {
-      const response = await api.get(`/chamados/${id}/chat-history`);
+      const response = await api.get(`/chamados/${id}/mensagens/chat-history`);
       return response.data;
     } catch (error) {
       throw error;
     }
+  },
+  
+  getImageUrl: (imagePath) => {
+    if (!imagePath) return null;
+    // Access directly through the public endpoint
+    return `${api.defaults.baseURL}/api/files/download/${imagePath}`;
   }
 };
 
