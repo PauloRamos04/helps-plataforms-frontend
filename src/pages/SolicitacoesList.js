@@ -22,14 +22,23 @@ function SolicitacoesList() {
   const navigate = useNavigate();
   const { auth } = useContext(AuthContext);
   
-  // Estados para filtros
+  // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [categoriaFilter, setCategoriaFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // Lista de categorias disponíveis
+  // Available categories list
   const categorias = ['SUPORTE', 'FINANCEIRO', 'TÉCNICO'];
+  
+  // Check user roles
+  const isAdmin = auth?.user?.roles?.some(role => 
+    role === 'ADMIN' || role === 'ROLE_ADMIN'
+  );
+  
+  const isHelper = auth?.user?.roles?.some(role => 
+    role === 'HELPER' || role === 'ROLE_HELPER'
+  );
 
   useEffect(() => {
     fetchChamados();
@@ -45,26 +54,26 @@ function SolicitacoesList() {
       setError(null);
       const data = await chamadoService.getChamados();
       
-      // Filtra os chamados para mostrar apenas os criados pelo usuário atual
-      // a menos que seja um ADMIN ou HELPER
-      const isAdminOrHelper = auth.user?.roles?.some(role => 
-        role === 'ADMIN' || 
-        role === 'HELPER' || 
-        role === 'ROLE_ADMIN' || 
-        role === 'ROLE_HELPER'
-      );
+      console.log('Received tickets data:', data);
+      
+      // Filter tickets to show only those created by the current user
+      // unless user is an ADMIN or HELPER
+      const isAdminOrHelper = isAdmin || isHelper;
       
       let filteredData = data;
       if (!isAdminOrHelper) {
-        filteredData = data.filter(chamado => 
-          chamado.usuario?.id === parseInt(auth.user?.id)
-        );
+        // Check both usuario.id and user.id to handle both backend naming conventions
+        filteredData = data.filter(chamado => {
+          const userId = parseInt(auth.user?.id);
+          const chamadoUserId = chamado.usuario?.id || chamado.user?.id;
+          return chamadoUserId === userId;
+        });
       }
       
       setChamados(filteredData);
     } catch (error) {
-      console.error('Erro ao carregar chamados:', error);
-      setError('Não foi possível carregar as solicitações. Por favor, tente novamente.');
+      console.error('Error loading tickets:', error);
+      setError('Could not load tickets. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -73,25 +82,45 @@ function SolicitacoesList() {
   const applyFilters = () => {
     let filtered = [...chamados];
     
-    // Aplicar filtro de pesquisa
+    // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(chamado => 
         (chamado.titulo && chamado.titulo.toLowerCase().includes(query)) ||
+        (chamado.title && chamado.title.toLowerCase().includes(query)) ||
         (chamado.descricao && chamado.descricao.toLowerCase().includes(query)) ||
-        (chamado.categoria && chamado.categoria.toLowerCase().includes(query)) ||
+        (chamado.description && chamado.description.toLowerCase().includes(query)) ||
+        ((chamado.categoria || chamado.category) && 
+         (chamado.categoria || chamado.category).toLowerCase().includes(query)) ||
         (chamado.id && chamado.id.toString().includes(query))
       );
     }
     
-    // Aplicar filtro de status
+    // Apply status filter
     if (statusFilter) {
-      filtered = filtered.filter(chamado => chamado.status === statusFilter);
+      // Handle both legacy and new status names
+      if (statusFilter === 'ABERTO') {
+        filtered = filtered.filter(chamado => 
+          chamado.status === 'ABERTO' || chamado.status === 'OPEN'
+        );
+      } else if (statusFilter === 'EM_ATENDIMENTO') {
+        filtered = filtered.filter(chamado => 
+          chamado.status === 'EM_ATENDIMENTO' || chamado.status === 'IN_PROGRESS'
+        );
+      } else if (statusFilter === 'FECHADO') {
+        filtered = filtered.filter(chamado => 
+          chamado.status === 'FECHADO' || chamado.status === 'CLOSED'
+        );
+      } else {
+        filtered = filtered.filter(chamado => chamado.status === statusFilter);
+      }
     }
     
-    // Aplicar filtro de categoria
+    // Apply category filter
     if (categoriaFilter) {
-      filtered = filtered.filter(chamado => chamado.categoria === categoriaFilter);
+      filtered = filtered.filter(chamado => 
+        chamado.categoria === categoriaFilter || chamado.category === categoriaFilter
+      );
     }
     
     setFilteredChamados(filtered);
@@ -126,16 +155,28 @@ function SolicitacoesList() {
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'ABERTO':
-        return { bg: '#e3f2fd', color: '#0d47a1' };
-      case 'EM_ATENDIMENTO':
-        return { bg: '#fff8e1', color: '#ff6f00' };
-      case 'FECHADO':
-        return { bg: '#e8f5e9', color: '#2e7d32' };
-      default:
-        return { bg: '#f5f5f5', color: '#616161' };
+    // Handle both legacy and new status names
+    if (status === 'ABERTO' || status === 'OPEN') {
+      return { bg: '#e3f2fd', color: '#0d47a1' };
+    } else if (status === 'EM_ATENDIMENTO' || status === 'IN_PROGRESS') {
+      return { bg: '#fff8e1', color: '#ff6f00' };
+    } else if (status === 'FECHADO' || status === 'CLOSED') {
+      return { bg: '#e8f5e9', color: '#2e7d32' };
+    } else {
+      return { bg: '#f5f5f5', color: '#616161' };
     }
+  };
+
+  const getStatusLabel = (status) => {
+    // Handle both legacy and new status names
+    if (status === 'ABERTO' || status === 'OPEN') {
+      return 'OPEN';
+    } else if (status === 'EM_ATENDIMENTO' || status === 'IN_PROGRESS') {
+      return 'IN PROGRESS';
+    } else if (status === 'FECHADO' || status === 'CLOSED') {
+      return 'CLOSED';
+    }
+    return status?.replace('_', ' ') || 'UNKNOWN';
   };
 
   const handleRowClick = (id) => {
@@ -147,7 +188,7 @@ function SolicitacoesList() {
     
     return (
       <Chip 
-        label={status.replace('_', ' ')}
+        label={getStatusLabel(status)}
         sx={{ 
           bgcolor: bg, 
           color: color,
@@ -170,7 +211,7 @@ function SolicitacoesList() {
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6" component="h1" sx={{ fontWeight: 'medium' }}>
-            Solicitações
+            Tickets
           </Typography>
           
           <Box>
@@ -185,10 +226,10 @@ function SolicitacoesList() {
                 mr: 1
               }}
             >
-              {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
             </Button>
             
-            <Tooltip title="Atualizar">
+            <Tooltip title="Refresh">
               <IconButton 
                 onClick={fetchChamados} 
                 disabled={loading}
@@ -208,19 +249,19 @@ function SolicitacoesList() {
                 ml: 2
               }}
             >
-              Nova Solicitação
+              New Ticket
             </Button>
           </Box>
         </Box>
         
-        {/* Filtros avançados */}
+        {/* Advanced filters */}
         {showFilters && (
           <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: '4px' }}>
             <Grid container spacing={2} alignItems="center">
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  placeholder="Buscar por título, descrição, ID..."
+                  placeholder="Search by title, description, ID..."
                   variant="outlined"
                   size="small"
                   value={searchQuery}
@@ -244,24 +285,24 @@ function SolicitacoesList() {
                     label="Status"
                     onChange={handleStatusFilterChange}
                   >
-                    <MenuItem value="">Todos</MenuItem>
-                    <MenuItem value="ABERTO">ABERTO</MenuItem>
-                    <MenuItem value="EM_ATENDIMENTO">EM ATENDIMENTO</MenuItem>
-                    <MenuItem value="FECHADO">FECHADO</MenuItem>
+                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="ABERTO">OPEN</MenuItem>
+                    <MenuItem value="EM_ATENDIMENTO">IN PROGRESS</MenuItem>
+                    <MenuItem value="FECHADO">CLOSED</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
               
               <Grid item xs={12} sm={3}>
                 <FormControl fullWidth size="small">
-                  <InputLabel id="categoria-filter-label">Categoria</InputLabel>
+                  <InputLabel id="categoria-filter-label">Category</InputLabel>
                   <Select
                     labelId="categoria-filter-label"
                     value={categoriaFilter}
-                    label="Categoria"
+                    label="Category"
                     onChange={handleCategoriaFilterChange}
                   >
-                    <MenuItem value="">Todas</MenuItem>
+                    <MenuItem value="">All</MenuItem>
                     {categorias.map((categoria) => (
                       <MenuItem key={categoria} value={categoria}>
                         {categoria}
@@ -278,7 +319,7 @@ function SolicitacoesList() {
                   fullWidth
                   sx={{ borderColor: '#e0e0e0', color: '#666' }}
                 >
-                  Limpar Filtros
+                  Clear Filters
                 </Button>
               </Grid>
             </Grid>
@@ -301,11 +342,11 @@ function SolicitacoesList() {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>ID</TableCell>
-                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>CATEGORIA</TableCell>
-                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>TÍTULO</TableCell>
-                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>DATA</TableCell>
+                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>CATEGORY</TableCell>
+                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>TITLE</TableCell>
+                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>DATE</TableCell>
                   <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>STATUS</TableCell>
-                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>AÇÕES</TableCell>
+                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>ACTIONS</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -320,16 +361,24 @@ function SolicitacoesList() {
                       }}
                     >
                       <TableCell sx={{ fontSize: '14px' }}>{`#${chamado.id}`}</TableCell>
-                      <TableCell sx={{ fontSize: '14px' }}>{chamado.categoria || '-'}</TableCell>
-                      <TableCell sx={{ fontSize: '14px' }}>{chamado.titulo}</TableCell>
                       <TableCell sx={{ fontSize: '14px' }}>
-                        {formatDate(chamado.dataAbertura)}
+                        {chamado.categoria || chamado.category || '-'}
                       </TableCell>
                       <TableCell sx={{ fontSize: '14px' }}>
-                        {renderStatus(chamado.status || 'ABERTO')}
+                        {chamado.titulo || chamado.title}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '14px' }}>
+                        {formatDate(
+                          chamado.dataAbertura || 
+                          chamado.openingDate || 
+                          chamado.dataCriacao
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '14px' }}>
+                        {renderStatus(chamado.status || 'OPEN')}
                       </TableCell>
                       <TableCell>
-                        <Tooltip title="Visualizar detalhes">
+                        <Tooltip title="View details">
                           <IconButton 
                             size="small" 
                             onClick={() => handleRowClick(chamado.id)}
@@ -345,14 +394,14 @@ function SolicitacoesList() {
                   <TableRow>
                     <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                       <Typography color="textSecondary">
-                        Nenhuma solicitação encontrada
+                        No tickets found
                       </Typography>
                       <Button 
                         variant="text" 
                         sx={{ mt: 1, color: '#4966f2' }}
                         onClick={() => navigate('/novo-chamado')}
                       >
-                        Criar nova solicitação
+                        Create new ticket
                       </Button>
                     </TableCell>
                   </TableRow>

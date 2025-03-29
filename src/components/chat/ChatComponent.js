@@ -9,18 +9,30 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
 import AuthContext from '../../context/AuthContext';
 import { chamadoService } from '../../api/chamadoService';
-import websocketService from '../../api/websocketService';
+import notificationService from '../../api/notificationService';
 
-const checkWebSocketService = () => {
-  const requiredMethods = ['connect', 'subscribeToChamado', 'addUser', 'sendMessage', 'unsubscribeFromChamado'];
-  const missingMethods = requiredMethods.filter(method => !websocketService[method] || typeof websocketService[method] !== 'function');
-  
-  if (missingMethods.length > 0) {
-    console.error('Missing methods in websocketService:', missingMethods);
-    return false;
+// Function to check if WebSocket service is available (graceful fallback)
+const isWebSocketAvailable = () => {
+  try {
+    // Check if the websocketService is imported and has required methods
+    const websocketService = require('../../api/websocketService').default;
+    
+    if (websocketService && 
+        typeof websocketService.connect === 'function' &&
+        typeof websocketService.subscribeToChamado === 'function') {
+      return true;
+    }
+  } catch (error) {
+    console.log('WebSocket service not available:', error);
   }
-  return true;
+  return false;
 };
+
+// Conditional import for WebSocket service
+let websocketService = null;
+if (isWebSocketAvailable()) {
+  websocketService = require('../../api/websocketService').default;
+}
 
 const MessageImage = ({ imagePath }) => {
   if (!imagePath) return null;
@@ -55,14 +67,16 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const [notification, setNotification] = useState({ open: false, message: '', type: 'info' });
   const messagesEndRef = useRef(null);
   const pollingIntervalRef = useRef(null);
-  const [isWebSocketEnabled, setIsWebSocketEnabled] = useState(checkWebSocketService());
+  const [isWebSocketEnabled, setIsWebSocketEnabled] = useState(!!websocketService);
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
 
   const isCurrentUserMessage = (message) => {
     const currentUserId = auth.user?.id;
-    return message.senderId === currentUserId || message.remetente?.id === currentUserId;
+    return message.senderId === currentUserId || 
+           message.remetente?.id === currentUserId ||
+           message.sender?.id === currentUserId;
   };
 
   const getUserColorScheme = (message) => {
@@ -76,13 +90,20 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         bubbleText: '#0d47a1'
       };
     } else {
-      const isHelper = message.remetente?.roles?.some(
-        role => role.name === 'HELPER' || role.name === 'ROLE_HELPER'
-      );
+      // Check for helper or admin roles in different possible field structures
+      const roles = message.remetente?.roles || message.sender?.roles || [];
       
-      const isAdmin = message.remetente?.roles?.some(
-        role => role.name === 'ADMIN' || role.name === 'ROLE_ADMIN'
-      );
+      const isHelper = Array.isArray(roles) ? 
+        roles.some(role => 
+          (typeof role === 'string' && (role === 'HELPER' || role === 'ROLE_HELPER')) ||
+          (role?.name && (role.name === 'HELPER' || role.name === 'ROLE_HELPER'))
+        ) : false;
+      
+      const isAdmin = Array.isArray(roles) ? 
+        roles.some(role => 
+          (typeof role === 'string' && (role === 'ADMIN' || role === 'ROLE_ADMIN')) ||
+          (role?.name && (role.name === 'ADMIN' || role.name === 'ROLE_ADMIN'))
+        ) : false;
       
       if (isAdmin) {
         return {
@@ -122,14 +143,15 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
           id: msg.id,
           type: 'CHAT',
           chamadoId: chamadoId,
-          senderId: msg.remetente?.id,
-          senderName: msg.remetente?.name || msg.remetente?.username || 'Usuário',
-          content: msg.conteudo,
-          timestamp: msg.dataEnvio,
-          remetente: msg.remetente,
-          conteudo: msg.conteudo,
-          dataEnvio: msg.dataEnvio,
-          imagePath: msg.imagePath
+          senderId: (msg.remetente || msg.sender)?.id,
+          senderName: (msg.remetente || msg.sender)?.name || 
+                     (msg.remetente || msg.sender)?.username || 'User',
+          content: msg.conteudo || msg.content,
+          timestamp: msg.dataEnvio || msg.sentDate,
+          remetente: msg.remetente || msg.sender,
+          conteudo: msg.conteudo || msg.content,
+          dataEnvio: msg.dataEnvio || msg.sentDate,
+          imagePath: msg.imagePath || msg.image_path
         }));
         
         setMessages(formattedMessages);
@@ -138,7 +160,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       }
     } catch (err) {
       if (!silent) {
-        setError('Não foi possível carregar as mensagens. Tente novamente.');
+        setError('Could not load messages. Please try again.');
       }
     } finally {
       if (!silent) {
@@ -158,8 +180,8 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   };
 
   const connectWebSocket = () => {
-    if (!isWebSocketEnabled || !chamadoId) {
-      console.log('WebSocket disabled or chamadoId not provided');
+    if (!isWebSocketEnabled || !websocketService || !chamadoId) {
+      console.log('WebSocket disabled or not available, falling back to polling');
       startPolling();
       return;
     }
@@ -184,13 +206,13 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
             });
             
             if (success) {
-              console.log('Subscription to chamado successful');
+              console.log('Subscription to ticket successful');
               try {
                 websocketService.addUser(chamadoId, {
                   type: 'JOIN',
                   chamadoId: chamadoId,
                   senderId: auth.user?.id,
-                  senderName: auth.user?.name || auth.user?.username || 'Usuário',
+                  senderName: auth.user?.name || auth.user?.username || 'User',
                   content: '',
                   timestamp: new Date().toISOString()
                 });
@@ -203,7 +225,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
               startPolling();
             } else {
               console.error('Failed to subscribe to chat channel');
-              setError('Could not subscribe to chat channel');
+              setError('Could not connect to chat channel');
               setIsConnecting(false);
               startPolling();
             }
@@ -234,14 +256,14 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
     
     fetchMessages();
     
-    if (isWebSocketEnabled) {
+    if (isWebSocketEnabled && websocketService) {
       connectWebSocket();
     } else {
       startPolling();
     }
     
     return () => {
-      if (isWebSocketEnabled && websocketService.isConnected) {
+      if (isWebSocketEnabled && websocketService && websocketService.isConnected) {
         try {
           websocketService.unsubscribeFromChamado(chamadoId);
         } catch (error) {
@@ -271,7 +293,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       type: 'CHAT',
       chamadoId: chamadoId,
       senderId: auth.user?.id,
-      senderName: auth.user?.name || auth.user?.username || 'Usuário',
+      senderName: auth.user?.name || auth.user?.username || 'User',
       content: messageInput,
       timestamp: new Date().toISOString()
     };
@@ -298,9 +320,24 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         formData.append('conteudo', currentMessage);
         formData.append('image', selectedImage);
         
-        response = await chamadoService.enviarMensagemComImagem(chamadoId, formData);
-        success = true;
-      } else if (isWebSocketEnabled && websocketService.isConnected) {
+        try {
+          response = await chamadoService.enviarMensagemComImagem(chamadoId, formData);
+          success = true;
+        } catch (imageUploadError) {
+          // Try the alternative endpoint if the first one fails
+          try {
+            const alternativeFormData = new FormData();
+            alternativeFormData.append('content', currentMessage);
+            alternativeFormData.append('image', selectedImage);
+            
+            response = await chamadoService.enviarMensagemComAnexos(chamadoId, alternativeFormData);
+            success = true;
+          } catch (alternativeError) {
+            console.error('Both image upload endpoints failed:', alternativeError);
+            throw imageUploadError; // Re-throw the original error
+          }
+        }
+      } else if (isWebSocketEnabled && websocketService && websocketService.isConnected) {
         try {
           success = websocketService.sendMessage(chamadoId, messageObj);
           console.log('Message sent via WebSocket:', success);
@@ -312,7 +349,11 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       
       if (!success && !selectedImage) {
         console.log('Sending message via API');
-        await chamadoService.enviarMensagem(chamadoId, { conteudo: currentMessage });
+        // Try both field names to be compatible with different backend versions
+        await chamadoService.enviarMensagem(chamadoId, { 
+          conteudo: currentMessage,
+          content: currentMessage
+        });
       }
       
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
@@ -322,6 +363,19 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
       // Clear image selection
       setSelectedImage(null);
       setImagePreview(null);
+      
+      // Notify with a custom notification for the ticket's owner
+      try {
+        if (notificationService && typeof notificationService.createTestNotification === 'function') {
+          await notificationService.createTestNotification(
+            `New message in ticket #${chamadoId}`,
+            'NOVA_MENSAGEM',
+            chamadoId
+          );
+        }
+      } catch (notifError) {
+        console.warn('Failed to send notification:', notifError);
+      }
       
     } catch (error) {
       console.error('Error sending message:', error);
@@ -392,12 +446,16 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   const handleRefreshMessages = () => {
     fetchMessages();
 
-    if (isWebSocketEnabled && !websocketService.isConnected) {
+    if (isWebSocketEnabled && websocketService && !websocketService.isConnected) {
       connectWebSocket();
     }
   };
 
-  const isChatDisabled = chamadoStatus !== 'EM_ATENDIMENTO';
+  // Check if chat is disabled based on ticket status
+  // Handle both old and new status formats
+  const isChatDisabled = 
+    chamadoStatus !== 'EM_ATENDIMENTO' && 
+    chamadoStatus !== 'IN_PROGRESS';
   
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
@@ -410,15 +468,32 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
   };
 
   const getUserRole = (message) => {
-    if (!message.remetente || !message.remetente.roles) return null;
+    // Handle different role formats
+    const roles = message.remetente?.roles || message.sender?.roles || [];
     
-    const roles = message.remetente.roles;
-    
-    if (roles.some(role => role.name === 'ADMIN' || role.name === 'ROLE_ADMIN')) {
-      return "Admin";
-    } else if (roles.some(role => role.name === 'HELPER' || role.name === 'ROLE_HELPER')) {
-      return "Helper";
+    if (!roles || !Array.isArray(roles)) {
+      return null;
     }
+    
+    // Check for admin role in both string or object format
+    const isAdmin = roles.some(role => {
+      if (typeof role === 'string') {
+        return role === 'ADMIN' || role === 'ROLE_ADMIN';
+      }
+      return role?.name === 'ADMIN' || role?.name === 'ROLE_ADMIN';
+    });
+    
+    if (isAdmin) return "Admin";
+    
+    // Check for helper role in both string or object format
+    const isHelper = roles.some(role => {
+      if (typeof role === 'string') {
+        return role === 'HELPER' || role === 'ROLE_HELPER';
+      }
+      return role?.name === 'HELPER' || role?.name === 'ROLE_HELPER';
+    });
+    
+    if (isHelper) return "Helper";
     
     return null;
   };
@@ -447,7 +522,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
         }}
       >
         <Typography variant="subtitle1" fontWeight="medium">
-          Chat do Chamado #{chamadoId}
+          Chat for Ticket #{chamadoId}
         </Typography>
         
         <span>
@@ -575,7 +650,7 @@ const ChatComponent = ({ chamadoId, chamadoStatus }) => {
                         </Typography>
                       </Box>
                       
-                      {message.content && (
+                      {(message.content || message.conteudo) && (
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                           {message.content || message.conteudo}
                         </Typography>

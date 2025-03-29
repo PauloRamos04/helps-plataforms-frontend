@@ -9,6 +9,7 @@ const api = axios.create({
   timeout: 15000
 });
 
+// Helper function to parse JWT tokens
 const parseJwt = (token) => {
   try {
     const base64Url = token.split('.')[1];
@@ -26,7 +27,7 @@ const parseJwt = (token) => {
   }
 };
 
-// Request interceptor
+// Add a request interceptor to attach the token to every request
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -40,23 +41,34 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor
+// Add a response interceptor to handle auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Handle 401 Unauthorized errors by logging out
     if (error.response && error.response.status === 401) {
-      // Token expired or invalid
+      // Save the current URL to redirect back after login
+      localStorage.setItem('redirect_after_login', window.location.pathname);
+      
+      // Clear auth data
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      
+      // Redirect to login page if not already there
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
 );
 
+// AuthService for handling login and authentication
 export const authService = {
   login: async (credentials) => {
     try {
+      console.log('Login attempt with credentials:', { ...credentials, password: '[REDACTED]' });
+      
       const response = await api.post('/login', credentials, {
         headers: {
           'Content-Type': 'application/json',
@@ -65,19 +77,30 @@ export const authService = {
       });
       
       const data = response.data;
+      console.log('Login response data:', data);
       
-      if (data.acessToken || data.accessToken) {
-        const token = data.acessToken || data.accessToken;
+      // Handle different token field names in responses (accessToken or acessToken)
+      if (data.accessToken || data.acessToken || data.token) {
+        const token = data.accessToken || data.acessToken || data.token;
         
         const tokenPayload = parseJwt(token);
+        console.log('Token payload:', tokenPayload);
         
         if (tokenPayload) {
+          // Extract user info from token, with fallbacks for different field names
           const user = {
-            id: tokenPayload.sub,
-            username: tokenPayload.username,
-            roles: tokenPayload.roles || [],
-            name: tokenPayload.name
+            id: tokenPayload.sub || tokenPayload.id || tokenPayload.userId,
+            username: tokenPayload.username || tokenPayload.login || tokenPayload.preferred_username,
+            roles: tokenPayload.roles || tokenPayload.authorities || [],
+            name: tokenPayload.name || tokenPayload.nome || tokenPayload.username
           };
+          
+          // Normalize roles if needed
+          if (typeof user.roles === 'string') {
+            user.roles = [user.roles];
+          } else if (!Array.isArray(user.roles)) {
+            user.roles = [];
+          }
           
           console.log('Login successful:', {
             user,
@@ -87,8 +110,8 @@ export const authService = {
           
           return {
             success: true,
-            user: user,
-            token: token
+            user,
+            token
           };
         }
       }
@@ -96,13 +119,13 @@ export const authService = {
       console.error('Invalid token or missing token in response:', data);
       return {
         success: false,
-        message: 'Erro de autenticação: token inválido ou ausente'
+        message: 'Authentication error: invalid or missing token'
       };
     } catch (error) {
       console.error('Login error details:', error.response ? error.response.data : error);
       return {
         success: false,
-        message: error.response?.data?.message || 'Credenciais inválidas'
+        message: error.response?.data?.message || 'Invalid credentials'
       };
     }
   },

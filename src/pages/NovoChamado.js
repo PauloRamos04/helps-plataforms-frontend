@@ -17,13 +17,12 @@ function NovoChamado() {
   const notificationsContext = useContext(NotificationsContext);
   const fileInputRef = useRef(null);
   
+  // Form state matches exactly the payload structure required by the API
   const [formData, setFormData] = useState({
-    setor: 'SAC',
-    tipoSolicitacao: 'CLIENTE SEM ACESSO A SVA',
-    responsavel: 'HELPER 1',
-    categoria: 'SUPORTE',
-    tipo: 'NORMAL',
-    descricao: ''
+    title: '',
+    category: '',
+    type: '',
+    description: ''
   });
   
   const [loading, setLoading] = useState(false);
@@ -81,29 +80,37 @@ function NovoChamado() {
     e.preventDefault();
     console.log("Form submitted", { formData, selectedImage });
     
+    // Validate required fields
+    if (!formData.title || !formData.category || !formData.type) {
+      setError("Please fill in all required fields (Title, Category, and Type are required)");
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     
     try {
       let response;
       
+      // Choose the right endpoint based on whether there's an image
       if (selectedImage) {
         console.log("Submitting with image:", selectedImage.name);
         
         // Create FormData for image upload
         const formDataToSend = new FormData();
-        formDataToSend.append('titulo', formData.tipoSolicitacao);
-        formDataToSend.append('descricao', formData.descricao);
-        formDataToSend.append('categoria', formData.categoria);
-        formDataToSend.append('tipo', formData.tipo);
+        formDataToSend.append('title', formData.title);
+        formDataToSend.append('category', formData.category);
+        formDataToSend.append('type', formData.type);
+        formDataToSend.append('description', formData.description);
         formDataToSend.append('image', selectedImage);
         
-        // Log FormData contents (can't directly log FormData content)
+        // Log FormData contents for debugging
         for (let [key, value] of formDataToSend.entries()) {
           console.log(`FormData field: ${key} = ${value instanceof File ? value.name : value}`);
         }
         
         try {
+          // Use the with-image endpoint when an image is present
           response = await chamadoService.createChamadoWithImage(formDataToSend);
           console.log("Image upload response:", response);
         } catch (uploadError) {
@@ -112,13 +119,12 @@ function NovoChamado() {
         }
       } else {
         console.log("Submitting without image");
+        // Use the regular endpoint when no image is present
         response = await chamadoService.createChamado({
-          titulo: formData.tipoSolicitacao,
-          descricao: formData.descricao,
-          setor: formData.setor,
-          responsavel: formData.responsavel,
-          categoria: formData.categoria,
-          tipo: formData.tipo
+          title: formData.title,
+          category: formData.category,
+          type: formData.type,
+          description: formData.description
         });
         console.log("Normal submission response:", response);
       }
@@ -130,13 +136,13 @@ function NovoChamado() {
       if (notificationsContext && typeof notificationsContext.addNotification === 'function') {
         try {
           notificationsContext.addNotification({
-            message: `New ticket created: ${formData.tipoSolicitacao}`,
+            message: `New ticket created: ${formData.title}`,
             type: 'NOVO_CHAMADO',
             read: false,
             chamadoId: response.id || 1,
             createdAt: new Date().toISOString(),
-            categoria: formData.categoria,
-            prioridade: formData.tipo
+            categoria: formData.category,
+            prioridade: formData.type
           });
         } catch (notifError) {
           console.warn("Failed to add notification:", notifError);
@@ -158,30 +164,6 @@ function NovoChamado() {
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false);
   };
-
-  const CustomSelect = ({ name, label, value, options, onChange }) => (
-    <Box sx={{ mb: 2 }}>
-      <FormControl fullWidth size="small">
-        <InputLabel id={`${name}-label`}>
-          {label}
-        </InputLabel>
-        <Select
-          labelId={`${name}-label`}
-          name={name}
-          value={value}
-          label={label}
-          onChange={onChange}
-          sx={{ bgcolor: 'white', borderRadius: '4px' }}
-        >
-          {options.map(option => (
-            <MenuItem key={option} value={option}>
-              {option}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-    </Box>
-  );
 
   return (
     <Box sx={{ p: 3 }}>
@@ -208,46 +190,57 @@ function NovoChamado() {
         )}
         
         <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
-          <CustomSelect 
-            name="setor"
-            label="Department"
-            value={formData.setor}
-            options={['SAC']}
+          {/* Title field */}
+          <TextField
+            fullWidth
+            label="Title"
+            name="title"
+            value={formData.title}
             onChange={handleChange}
+            margin="normal"
+            required
+            sx={{ mb: 2, '.MuiOutlinedInput-root': { bgcolor: 'white' } }}
           />
           
-          <CustomSelect 
-            name="tipoSolicitacao"
-            label="Request"
-            value={formData.tipoSolicitacao}
-            options={['CLIENTE SEM ACESSO A SVA']}
-            onChange={handleChange}
-          />
+          {/* Category field */}
+          <FormControl fullWidth margin="normal" sx={{ mb: 2 }}>
+            <InputLabel id="category-label">Category *</InputLabel>
+            <Select
+              labelId="category-label"
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              label="Category *"
+              required
+              sx={{ bgcolor: 'white' }}
+            >
+              <MenuItem value="">Select a category</MenuItem>
+              <MenuItem value="SUPORTE">SUPORTE</MenuItem>
+              <MenuItem value="FINANCEIRO">FINANCEIRO</MenuItem>
+              <MenuItem value="TÉCNICO">TÉCNICO</MenuItem>
+            </Select>
+          </FormControl>
           
-          <CustomSelect 
-            name="responsavel"
-            label="Responsible"
-            value={formData.responsavel}
-            options={['HELPER 1', 'HELPER 2']}
-            onChange={handleChange}
-          />
+          {/* Type field */}
+          <FormControl fullWidth margin="normal" sx={{ mb: 2 }}>
+            <InputLabel id="type-label">Type *</InputLabel>
+            <Select
+              labelId="type-label"
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              label="Type *"
+              required
+              sx={{ bgcolor: 'white' }}
+            >
+              <MenuItem value="">Select a type</MenuItem>
+              <MenuItem value="NORMAL">NORMAL</MenuItem>
+              <MenuItem value="URGENTE">URGENTE</MenuItem>
+              <MenuItem value="PRIORITÁRIO">PRIORITÁRIO</MenuItem>
+            </Select>
+          </FormControl>
           
-          <CustomSelect 
-            name="categoria"
-            label="Category"
-            value={formData.categoria}
-            options={['SUPORTE', 'FINANCEIRO', 'TÉCNICO']}
-            onChange={handleChange}
-          />
-          
-          <CustomSelect 
-            name="tipo"
-            label="Type"
-            value={formData.tipo}
-            options={['NORMAL', 'URGENTE', 'PRIORITÁRIO']}
-            onChange={handleChange}
-          />
-          
+          {/* Description field */}
           <Box 
             sx={{ 
               p: 3, 
@@ -261,9 +254,10 @@ function NovoChamado() {
               fullWidth
               multiline
               rows={6}
+              label="Description"
               placeholder="Describe your request here..."
-              name="descricao"
-              value={formData.descricao}
+              name="description"
+              value={formData.description}
               onChange={handleChange}
               variant="outlined"
               sx={{ 
@@ -346,7 +340,7 @@ function NovoChamado() {
               {loading ? (
                 <CircularProgress size={24} color="inherit" />
               ) : (
-                'Send'
+                'Submit Ticket'
               )}
             </Button>
           </Box>
