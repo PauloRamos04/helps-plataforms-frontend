@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL, API_TIMEOUT, getDefaultConfig, ENDPOINTS, API_CODES } from '../config/apiConfig';
 
-// Create axios instance with default configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT,
@@ -10,7 +9,6 @@ const api = axios.create({
   }
 });
 
-// Function to parse JWT tokens
 const parseJwt = (token) => {
   try {
     const base64Url = token.split('.')[1];
@@ -28,7 +26,6 @@ const parseJwt = (token) => {
   }
 };
 
-// Setup request interceptor to add token to requests
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -40,14 +37,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Setup response interceptor to handle common error cases
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Get error details
     const { response, request, message } = error;
     
-    // Create standardized error object
     const errorDetails = {
       message: 'An error occurred',
       statusCode: 500,
@@ -55,27 +49,21 @@ api.interceptors.response.use(
       originalError: error
     };
     
-    // Handle response errors (server responded with error)
     if (response) {
       errorDetails.statusCode = response.status;
       errorDetails.data = response.data;
       
-      // Extract message from response if available
       if (response.data && response.data.message) {
         errorDetails.message = response.data.message;
       } else {
         errorDetails.message = `Server error: ${response.status}`;
       }
       
-      // Handle unauthorized errors (token expired or invalid)
       if (response.status === API_CODES.UNAUTHORIZED) {
-        // Clear token and user data
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         
-        // Redirect to login page if not already there
         if (window.location.pathname !== '/login') {
-          // Use timeout to avoid state updates during render
           setTimeout(() => {
             window.location.href = '/login';
           }, 100);
@@ -84,24 +72,20 @@ api.interceptors.response.use(
         errorDetails.message = 'Session expired. Please log in again.';
       }
     } 
-    // Handle request errors (no response received)
+
     else if (request) {
       errorDetails.message = 'No response from server. Please check your connection.';
     } 
-    // Handle client-side errors
     else {
       errorDetails.message = message;
     }
     
-    // Log error for debugging
     console.error('API Error:', errorDetails);
     
-    // Return rejected promise with enhanced error details
     return Promise.reject(errorDetails);
   }
 );
 
-// Auth service functions
 export const authService = {
   login: async (credentials) => {
     try {
@@ -121,7 +105,6 @@ export const authService = {
             name: tokenPayload.name
           };
           
-          // Store auth data in localStorage
           localStorage.setItem('token', token);
           localStorage.setItem('user', JSON.stringify(user));
           
