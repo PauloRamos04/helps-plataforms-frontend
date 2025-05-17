@@ -118,7 +118,6 @@ export const chamadoService = {
   
   getImageUrl: (imagePath) => {
     if (!imagePath) return null;
-    // Access directly through the public endpoint
     return `${api.defaults.baseURL}/api/files/download/${imagePath}`;
   }
 };

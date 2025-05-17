@@ -12,11 +12,10 @@ class NotificationWebSocketService {
     this.notificationCallbacks = [];
     this.debug = false;
     this.baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8080';
-    this.connectionState = 'DISCONNECTED'; // ['DISCONNECTED', 'CONNECTING', 'CONNECTED', 'RECONNECTING']
+    this.connectionState = 'DISCONNECTED';
   }
 
   connect(onConnected, onError) {
-    // Evitar conexões múltiplas
     if (this.connectionState === 'CONNECTING' || this.connectionState === 'RECONNECTING') {
       this.log('WebSocket já está tentando conectar, ignorando chamada');
       return;
@@ -31,13 +30,11 @@ class NotificationWebSocketService {
     this.connectionState = 'CONNECTING';
 
     try {
-      // Cancelar qualquer reconexão agendada
       if (this.reconnectTimeout) {
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = null;
       }
       
-      // Verificar autenticação
       const token = localStorage.getItem('token');
       if (!token) {
         this.error('Sem token de autenticação para WebSocket');
@@ -46,11 +43,9 @@ class NotificationWebSocketService {
         return;
       }
       
-      // URL do WebSocket
       const socketUrl = `${this.baseUrl}/ws`;
       this.log(`Conectando ao WebSocket em: ${socketUrl}`);
       
-      // Criar conexão SockJS
       const socket = new SockJS(socketUrl, null, {
         transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
         timeout: 5000
