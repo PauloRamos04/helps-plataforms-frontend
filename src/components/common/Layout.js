@@ -12,35 +12,28 @@ import ListIcon from '@mui/icons-material/List';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import LogoutIcon from '@mui/icons-material/Logout';
 import NotificationsMenu from '../notifications/NotificationsMenu';
+import alaresLogo from '../../assets/alares.png';
 
 const Logo = () => (
-  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-    <Box 
-      component="span"
-      sx={{ 
-        color: 'white', 
-        fontWeight: 'bold', 
-        fontSize: '18px',
-        bgcolor: '#4966f2', 
-        px: 1.5,
-        py: 0.3,
-        borderRadius: '4px',
-        mb: 1
-      }}
-    >
-      alares
-      <Box component="span" sx={{ ml: 0.5, fontSize: '16px' }}>➚</Box>
-    </Box>
-    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-      <Box component="span" sx={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>
-        Ei, dá um
-      </Box>
-      <Box component="span" sx={{ color: 'white', fontWeight: 'bold', fontSize: '18px', ml: 1 }}>
-        Helps!
-      </Box>
-      <Box component="span" sx={{ color: 'white', ml: 0.5, fontSize: '16px' }}>➚</Box>
-    </Box>
-  </Box>
+  <Box
+          sx={{
+            mb: 4,
+            display: 'flex',
+            justifyContent: 'center',
+            width: '100%',
+          }}
+        >
+          <Box
+            component="img"
+            src={alaresLogo}
+            alt="Alares Logo"
+            sx={{
+              height: 70, 
+              width: 'auto',
+              borderRadius: '8px',
+            }}
+          />
+        </Box>
 );
 
 const MenuItem = ({ to, active, icon, children }) => (

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useContext } from 'react';
 import {
   Box, Typography, Paper, Button, Grid, Chip, 
   CircularProgress, Alert, Divider, Snackbar,
-  Card, CardContent, Dialog, DialogContent
+  Card, CardContent, Dialog, DialogContent, Tooltip
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { chamadoService } from '../api/chamadoService';
@@ -34,16 +34,13 @@ function ChamadoDetail() {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching ticket data ID:', id);
       const data = await chamadoService.getChamadoById(id);
-      console.log('Ticket data received:', data);
       setChamado(data);
       if (data.helper && data.helper.username) {
         setSelectedHelper(data.helper.username);
       }
     } catch (error) {
-      console.error('Error loading ticket details:', error);
-      setError('Could not load ticket details. Please try again.');
+      setError('Não foi possível carregar os detalhes do chamado. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -56,7 +53,7 @@ function ChamadoDetail() {
       if (chamado.status !== 'ABERTO') {
         setNotification({
           open: true,
-          message: `Cannot take a ticket with status ${chamado.status}`,
+          message: `Não é possível assumir um chamado com status ${chamado.status}`,
           severity: 'warning'
         });
         setActionInProgress(false);
@@ -68,14 +65,12 @@ function ChamadoDetail() {
       
       setNotification({
         open: true,
-        message: 'You have successfully taken the ticket!',
+        message: 'Você assumiu o chamado com sucesso!',
         severity: 'success'
       });
     } catch (error) {
-      console.error('Error taking ticket:', error);
-      
       const errorMessage = error.response?.data?.message || 
-                          'Could not take the ticket. Check if the status is correct.';
+                          'Não foi possível assumir o chamado. Verifique se o status está correto.';
       
       setNotification({
         open: true,
@@ -94,14 +89,13 @@ function ChamadoDetail() {
       await fetchChamado();
       setNotification({
         open: true,
-        message: 'Ticket finalized successfully!',
+        message: 'Chamado finalizado com sucesso!',
         severity: 'success'
       });
     } catch (error) {
-      console.error('Error finalizing ticket:', error);
       setNotification({
         open: true,
-        message: 'Could not finalize the ticket. Try again.',
+        message: 'Não foi possível finalizar o chamado. Tente novamente.',
         severity: 'error'
       });
     } finally {
@@ -174,7 +168,7 @@ function ChamadoDetail() {
           onClick={() => navigate('/chamados')}
           sx={{ mt: 2, color: '#4966f2' }}
         >
-          Back to tickets list
+          Voltar para lista de chamados
         </Button>
       </Box>
     );
@@ -183,13 +177,13 @@ function ChamadoDetail() {
   if (!chamado) {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="warning">Ticket not found.</Alert>
+        <Alert severity="warning">Chamado não encontrado.</Alert>
         <Button 
           variant="text" 
           onClick={() => navigate('/chamados')}
           sx={{ mt: 2, color: '#4966f2' }}
         >
-          Back to tickets list
+          Voltar para lista de chamados
         </Button>
       </Box>
     );
@@ -200,176 +194,191 @@ function ChamadoDetail() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Paper 
-        elevation={0} 
-        sx={{ 
-          borderRadius: '8px',
-          p: 3,
-          mb: 3
-        }}
-      >
-        {/* Ticket Header */}
-        <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+      {/* Container Principal */}
+      <Box sx={{ mb: 3 }}>
+        {/* Cabeçalho */}
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            p: 2,
+            borderRadius: '8px 8px 0 0',
+            border: '1px solid #e0e0e0',
+            borderBottom: 'none',
+            bgcolor: '#f5f5f5',
+          }}
+        >
+          {/* Título e Status */}
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            mb: 1
+          }}>
             <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold' }}>
-              {chamado.titulo}
+              {chamado.title}
             </Typography>
             
             <Chip 
-              label={chamado.status?.replace('_', ' ') || 'OPEN'}
+              label={chamado.status?.replace('_', ' ') || 'ABERTO'}
               sx={{ 
                 bgcolor: statusColor.bg, 
                 color: statusColor.color,
                 fontWeight: 'medium',
-                fontSize: '0.875rem',
-                py: 0.5,
-                px: 1
               }}
             />
           </Box>
           
-          <Box sx={{ display: 'flex', mb: 1 }}>
-            <Typography sx={{ color: '#666', mr: 1 }}>
-              <strong>Created by:</strong> {chamado.usuario?.name || chamado.usuario?.username || 'User'}
+          {/* Info do usuário e categoria */}
+          <Box sx={{ 
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 1
+          }}>
+            <Typography variant="body2" sx={{ color: '#666' }}>
+              Criado por: {chamado.user?.username} em {formatDate(chamado.openingDate)}
             </Typography>
-            <Typography sx={{ color: '#666', fontSize: '14px' }}>
-              on {formatDate(chamado.dataAbertura)}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-            <Chip 
-              label={`Category: ${chamado.categoria}`} 
-              variant="outlined" 
-              size="small" 
-              sx={{ bgcolor: '#f0f0f0' }} 
-            />
-            <Chip 
-              label={`Type: ${chamado.tipo}`} 
-              variant="outlined" 
-              size="small" 
-              sx={{ bgcolor: '#f0f0f0' }} 
-            />
-          </Box>
-        </Box>
-
-        <Grid container spacing={3}>
-          {/* Left Column: Ticket Details, Image and Chat */}
-          <Grid item xs={12} md={8}>
-            {/* Ticket Description Card */}
-            <Card variant="outlined" sx={{ mb: 3 }}>
-              <CardContent>
-                <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
-                  Description
-                </Typography>
-                
-                <Typography 
-                  variant="body1" 
-                  sx={{ 
-                    whiteSpace: 'pre-wrap', 
-                    mb: imageUrl ? 3 : 0,
-                    color: '#333' 
-                  }}
-                >
-                  {chamado.descricao}
-                </Typography>
-                
-                {imageUrl && (
-                  <Box sx={{ mt: 3, textAlign: 'center', position: 'relative' }}>
-                    <Box 
-                      sx={{ 
-                        position: 'relative', 
-                        display: 'inline-block',
-                        maxWidth: '100%',
-                        '&:hover .zoom-icon': {
-                          opacity: 1
-                        }
-                      }}
-                    >
-                      <img 
-                        src={imageUrl} 
-                        alt="Ticket attachment" 
-                        style={{ 
-                          maxWidth: '100%', 
-                          maxHeight: '300px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                        }}
-                        onClick={handleOpenImageDialog}
-                      />
-                      <Box 
-                        className="zoom-icon"
-                        sx={{ 
-                          position: 'absolute', 
-                          top: '8px', 
-                          right: '8px',
-                          backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                          borderRadius: '50%',
-                          padding: '4px',
-                          cursor: 'pointer',
-                          opacity: 0,
-                          transition: 'opacity 0.2s ease-in-out'
-                        }}
-                        onClick={handleOpenImageDialog}
-                      >
-                        <ZoomOutMapIcon fontSize="small" />
-                      </Box>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      Click to enlarge image
-                    </Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-
-            <Divider sx={{ my: 3 }} />
-
-            {/* Chat Section */}
-            <Box sx={{ width: '100%', mb: 3 }}>
-              <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
-                Chat
-              </Typography>
-              <ChatComponent chamadoId={parseInt(id)} chamadoStatus={chamado.status} />
+            
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Tooltip title={chamado.category} arrow>
+                <Chip 
+                  label={`Categoria: ${chamado.category.length > 20 ? 
+                    chamado.category.substring(0, 20) + '...' : 
+                    chamado.category}`}
+                  variant="outlined" 
+                  size="small" 
+                  sx={{ bgcolor: '#f0f0f0', height: 24 }} 
+                />
+              </Tooltip>
+              
+              <Chip 
+                label={`Tipo: ${chamado.tipo}`} 
+                variant="outlined" 
+                size="small" 
+                sx={{ bgcolor: '#f0f0f0', height: 24 }} 
+              />
             </Box>
-          </Grid>
+          </Box>
+        </Paper>
 
-          {/* Right Column: Status, Helper, Actions */}
-          <Grid item xs={12} md={4}>
-            <Paper 
-              elevation={0} 
-              sx={{ 
-                p: 3, 
-                borderRadius: '8px',
-                border: '1px solid #e0e0e0'
-              }}
-            >
+        {/* Conteúdo dividido em duas colunas */}
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' }
+        }}>
+          {/* Coluna do Chat - Encapsulado em um Paper para manter borda consistente */}
+          <Box sx={{ 
+            width: { xs: '100%', md: '60%' },
+            border: '1px solid #e0e0e0',
+            borderRight: { xs: '1px solid #e0e0e0', md: 'none' },
+            borderRadius: { xs: '0 0 8px 8px', md: '0 0 0 8px' },
+            overflow: 'hidden',
+            minHeight: '300px'
+          }}>
+            <ChatComponentWrapper 
+              chamadoId={parseInt(id)} 
+              chamadoStatus={chamado.status}
+              alignUserMessages="right"
+            />
+          </Box>
+
+          {/* Coluna de Informações */}
+          <Paper
+            elevation={0}
+            sx={{ 
+              width: { xs: '100%', md: '40%' },
+              p: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
+              border: '1px solid #e0e0e0',
+              borderLeft: { xs: '1px solid #e0e0e0', md: 'none' },
+              borderTop: { xs: 'none', md: '1px solid #e0e0e0' },
+              borderRadius: { xs: '0', md: '0 0 8px 0' },
+              mt: { xs: 0, md: 0 }
+            }}
+          >
+            {/* Card de descrição */}
+            <Box>
               <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
-                Ticket Information
+                Descrição do Chamado
+              </Typography>
+              
+              <Typography 
+                variant="body1" 
+                sx={{ 
+                  whiteSpace: 'pre-wrap', 
+                  mb: imageUrl ? 3 : 0,
+                  color: '#333',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                  lineHeight: 1.6
+                }}
+              >
+                {chamado.description}
+              </Typography>
+              
+              {imageUrl && (
+                <Box sx={{ mt: 3, textAlign: 'center', position: 'relative' }}>
+                  <Box 
+                    sx={{ 
+                      position: 'relative', 
+                      display: 'inline-block',
+                      maxWidth: '100%',
+                      '&:hover .zoom-icon': {
+                        opacity: 1
+                      }
+                    }}
+                  >
+                    <img 
+                      src={imageUrl} 
+                      alt="Anexo do chamado" 
+                      style={{ 
+                        maxWidth: '100%', 
+                        maxHeight: '300px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      }}
+                      onClick={handleOpenImageDialog}
+                    />
+                    <Box 
+                      className="zoom-icon"
+                      sx={{ 
+                        position: 'absolute', 
+                        top: '8px', 
+                        right: '8px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                        borderRadius: '50%',
+                        padding: '4px',
+                        cursor: 'pointer',
+                        opacity: 0,
+                        transition: 'opacity 0.2s ease-in-out'
+                      }}
+                      onClick={handleOpenImageDialog}
+                    >
+                      <ZoomOutMapIcon fontSize="small" />
+                    </Box>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    Clique para ampliar a imagem
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            <Divider />
+
+            {/* Informações do chamado */}
+            <Box>
+              <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
+                Informações do Chamado
               </Typography>
               
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Status
-                </Typography>
-                <Chip 
-                  label={chamado.status?.replace('_', ' ') || 'OPEN'}
-                  sx={{ 
-                    bgcolor: statusColor.bg, 
-                    color: statusColor.color,
-                    fontWeight: 'medium',
-                    width: '100%',
-                    justifyContent: 'left'
-                  }}
-                />
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Assigned Helper
+                  Atendente Designado
                 </Typography>
                 
                 {chamado.helper ? (
@@ -386,7 +395,7 @@ function ChamadoDetail() {
                         {chamado.helper.name || chamado.helper.username}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {chamado.dataInicio ? `Attending since ${formatDate(chamado.dataInicio)}` : ''}
+                        {chamado.dataInicio ? `Atendendo desde ${formatDate(chamado.dataInicio)}` : ''}
                       </Typography>
                     </Box>
                   </Box>
@@ -401,7 +410,7 @@ function ChamadoDetail() {
                     }}
                   >
                     <Typography variant="body2" color="text.secondary">
-                      No helper assigned
+                      Nenhum atendente designado
                     </Typography>
                   </Box>
                 )}
@@ -411,7 +420,7 @@ function ChamadoDetail() {
 
               <Box sx={{ mt: 3 }}>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Actions
+                  Ações
                 </Typography>
                 
                 {isHelperOrAdmin() && chamado.status === 'ABERTO' && (
@@ -428,7 +437,7 @@ function ChamadoDetail() {
                       py: 1
                     }}
                   >
-                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Take This Ticket'}
+                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Assumir Este Chamado'}
                   </Button>
                 )}
 
@@ -446,7 +455,7 @@ function ChamadoDetail() {
                       py: 1
                     }}
                   >
-                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Finalize Ticket'}
+                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Finalizar Chamado'}
                   </Button>
                 )}
 
@@ -462,15 +471,14 @@ function ChamadoDetail() {
                     py: 1
                   }}
                 >
-                  Back to list
+                  Voltar para lista
                 </Button>
               </Box>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Paper>
+            </Box>
+          </Paper>
+        </Box>
+      </Box>
 
-      {/* Image Dialog */}
       <Dialog 
         open={imageDialogOpen} 
         onClose={handleCloseImageDialog}
@@ -490,7 +498,7 @@ function ChamadoDetail() {
             <>
               <img 
                 src={imageUrl} 
-                alt="Ticket attachment" 
+                alt="Anexo do chamado" 
                 style={{ 
                   maxWidth: '100%', 
                   maxHeight: '80vh',
@@ -510,14 +518,13 @@ function ChamadoDetail() {
                 }}
                 onClick={handleCloseImageDialog}
               >
-                Close
+                Fechar
               </Button>
             </>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Notification Snackbar */}
       <Snackbar
         open={notification.open}
         autoHideDuration={5000}
@@ -535,5 +542,11 @@ function ChamadoDetail() {
     </Box>
   );
 }
+
+// Componente de wrapper para o ChatComponent
+// Este componente simplesmente passa as props para o ChatComponent real
+const ChatComponentWrapper = (props) => {
+  return <ChatComponent {...props} />;
+};
 
 export default ChamadoDetail;

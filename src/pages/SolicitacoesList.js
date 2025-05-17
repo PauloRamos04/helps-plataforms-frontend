@@ -101,15 +101,15 @@ function SolicitacoesList() {
       // Handle both legacy and new status names
       if (statusFilter === 'ABERTO') {
         filtered = filtered.filter(chamado => 
-          chamado.status === 'ABERTO' || chamado.status === 'OPEN'
+          chamado.status === 'ABERTO' || chamado.status === 'ABERTO'
         );
       } else if (statusFilter === 'EM_ATENDIMENTO') {
         filtered = filtered.filter(chamado => 
-          chamado.status === 'EM_ATENDIMENTO' || chamado.status === 'IN_PROGRESS'
+          chamado.status === 'EM_ATENDIMENTO' || chamado.status === 'EM ATENDIMENTO'
         );
       } else if (statusFilter === 'FECHADO') {
         filtered = filtered.filter(chamado => 
-          chamado.status === 'FECHADO' || chamado.status === 'CLOSED'
+          chamado.status === 'FECHADO' || chamado.status === 'FECHADO'
         );
       } else {
         filtered = filtered.filter(chamado => chamado.status === statusFilter);
@@ -156,11 +156,11 @@ function SolicitacoesList() {
 
   const getStatusColor = (status) => {
     // Handle both legacy and new status names
-    if (status === 'ABERTO' || status === 'OPEN') {
+    if (status === 'ABERTO' || status === 'ABERTO') {
       return { bg: '#e3f2fd', color: '#0d47a1' };
-    } else if (status === 'EM_ATENDIMENTO' || status === 'IN_PROGRESS') {
+    } else if (status === 'EM_ATENDIMENTO' || status === 'EM ATENDIMENTO') {
       return { bg: '#fff8e1', color: '#ff6f00' };
-    } else if (status === 'FECHADO' || status === 'CLOSED') {
+    } else if (status === 'FECHADO' || status === 'FECHADO') {
       return { bg: '#e8f5e9', color: '#2e7d32' };
     } else {
       return { bg: '#f5f5f5', color: '#616161' };
@@ -169,12 +169,12 @@ function SolicitacoesList() {
 
   const getStatusLabel = (status) => {
     // Handle both legacy and new status names
-    if (status === 'ABERTO' || status === 'OPEN') {
-      return 'OPEN';
-    } else if (status === 'EM_ATENDIMENTO' || status === 'IN_PROGRESS') {
-      return 'IN PROGRESS';
-    } else if (status === 'FECHADO' || status === 'CLOSED') {
-      return 'CLOSED';
+    if (status === 'ABERTO' || status === 'ABERTO') {
+      return 'ABERTO';
+    } else if (status === 'EM_ATENDIMENTO' || status === 'EM ATENDIMENTO') {
+      return 'EM ATENDIMENTO';
+    } else if (status === 'FECHADO' || status === 'FECHADO') {
+      return 'FECHADO';
     }
     return status?.replace('_', ' ') || 'UNKNOWN';
   };
@@ -286,9 +286,9 @@ function SolicitacoesList() {
                     onChange={handleStatusFilterChange}
                   >
                     <MenuItem value="">All</MenuItem>
-                    <MenuItem value="ABERTO">OPEN</MenuItem>
+                    <MenuItem value="ABERTO">ABERTO</MenuItem>
                     <MenuItem value="EM_ATENDIMENTO">IN PROGRESS</MenuItem>
-                    <MenuItem value="FECHADO">CLOSED</MenuItem>
+                    <MenuItem value="FECHADO">FECHADO</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -375,7 +375,7 @@ function SolicitacoesList() {
                         )}
                       </TableCell>
                       <TableCell sx={{ fontSize: '14px' }}>
-                        {renderStatus(chamado.status || 'OPEN')}
+                        {renderStatus(chamado.status || 'ABERTO')}
                       </TableCell>
                       <TableCell>
                         <Tooltip title="View details">

@@ -16,7 +16,6 @@ import { chamadoService } from '../../api/chamadoService';
 import websocketService from '../../api/websocketService';
 import AttachmentPreview from '../attachments/AttachmentPreview';
 
-// Componente de mensagem individual - memoizado para melhorar performance
 const ChatMessage = React.memo(({ message, formatTime, getInitial, getUserRole }) => {
   const isSentByCurrentUser = message.isSentByCurrentUser;
   const colorScheme = message.colorScheme;
@@ -105,7 +104,6 @@ const ChatMessage = React.memo(({ message, formatTime, getInitial, getUserRole }
             {message.content || message.conteudo}
           </Typography>
           
-          {/* Renderizar anexos, se houver */}
           {message.attachments && message.attachments.length > 0 && (
             <Box sx={{ mt: 1 }}>
               {message.attachments.map((attachment, idx) => (
@@ -136,8 +134,7 @@ const ChatMessage = React.memo(({ message, formatTime, getInitial, getUserRole }
   );
 });
 
-// Componente principal do chat - com otimizações de performance
-const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
+const MemoizedChatComponent = ({ chamadoId, chamadoStatus, alignUserMessages = "right" }) => {
   const { auth } = useContext(AuthContext);
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
@@ -154,7 +151,6 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
   const [attachmentMenuAnchor, setAttachmentMenuAnchor] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Funções memoizadas para evitar re-renders desnecessários
   const isCurrentUserMessage = useCallback((message) => {
     const currentUserId = auth.user?.id;
     return message.senderId === currentUserId || message.remetente?.id === currentUserId;
@@ -222,13 +218,12 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     if (roles.some(role => role === 'ADMIN' || role === 'ROLE_ADMIN')) {
       return "Admin";
     } else if (roles.some(role => role === 'HELPER' || role === 'ROLE_HELPER')) {
-      return "Helper";
+      return "Atendente";
     }
     
     return null;
   }, []);
 
-  // Throttle para evitar múltiplas chamadas de fetch
   const throttledFetchMessages = useCallback(
     throttle(async (silent = false) => {
       if (!chamadoId) return;
@@ -273,7 +268,6 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     [chamadoId, auth.user?.id]
   );
 
-  // Usar startPolling com useCallback para evitar re-criações
   const startPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -284,11 +278,9 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     }, 10000);
   }, [throttledFetchMessages]);
 
-  // Criar connectWebSocket com useCallback
   const connectWebSocket = useCallback(() => {
     if (!isWebSocketEnabled || !chamadoId) {
-      console.log('WebSocket desabilitado ou chamadoId não fornecido');
-      startPolling(); // Fallback para polling
+      startPolling();
       return;
     }
     
@@ -298,10 +290,8 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     try {
       websocketService.connect(
         () => {
-          console.log('WebSocket conectado com sucesso');
           try {
             const success = websocketService.subscribeToChamado(chamadoId, (message) => {
-              console.log('Mensagem recebida via WebSocket:', message);
               if (message.type === 'CHAT') {
                 setMessages(prev => {
                   const exists = prev.some(m => m.id === message.id);
@@ -322,7 +312,6 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
             });
             
             if (success) {
-              console.log('Assinatura ao chamado bem-sucedida');
               try {
                 websocketService.addUser(chamadoId, {
                   type: 'JOIN',
@@ -332,42 +321,36 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
                   content: '',
                   timestamp: new Date().toISOString()
                 });
-                console.log('Usuário adicionado ao chat');
               } catch (userError) {
-                console.error('Erro ao adicionar usuário ao chat:', userError);
+                // Falha silenciosa
               }
               
               setIsConnecting(false);
               startPolling();
             } else {
-              console.error('Falha ao assinar o canal do chat');
               setError('Não foi possível se inscrever no canal do chat');
               setIsConnecting(false);
               startPolling();
             }
           } catch (subError) {
-            console.error('Erro ao tentar assinar o canal:', subError);
             setError('Erro ao conectar ao chat, usando modo alternativo.');
             setIsConnecting(false);
             startPolling();
           }
         },
         (error) => {
-          console.error('Erro na conexão WebSocket:', error);
           setError('Usando modo alternativo para receber mensagens.');
           setIsConnecting(false);
           startPolling();
         }
       );
     } catch (error) {
-      console.error('Erro ao iniciar conexão WebSocket:', error);
       setError('Falha na conexão, usando modo alternativo para receber mensagens.');
       setIsConnecting(false);
       startPolling();
     }
   }, [chamadoId, auth.user?.id, auth.user?.name, auth.user?.username, isWebSocketEnabled, startPolling, getUserColorScheme]);
 
-  // Setup inicial com useEffect
   useEffect(() => {
     if (!chamadoId) return;
     
@@ -384,7 +367,7 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
         try {
           websocketService.unsubscribeFromChamado(chamadoId);
         } catch (error) {
-          console.error('Erro ao cancelar assinatura do chat:', error);
+          // Falha silenciosa
         }
       }
       
@@ -395,14 +378,12 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     };
   }, [chamadoId, throttledFetchMessages, connectWebSocket, startPolling, isWebSocketEnabled]);
 
-  // Scroll para a última mensagem
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
-  // Memoizar mensagens processadas com dados de visualização
   const processedMessages = useMemo(() => {
     return messages.map(message => ({
       ...message,
@@ -411,7 +392,6 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     }));
   }, [messages, isCurrentUserMessage, getUserColorScheme]);
 
-  // Gerenciamento de anexos
   const handleAttachmentClick = (event) => {
     setAttachmentMenuAnchor(event.currentTarget);
   };
@@ -424,7 +404,6 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
     
-    // Verificar tamanho dos arquivos (limite de 5MB por arquivo)
     const oversizedFiles = files.filter(file => file.size > 5 * 1024 * 1024);
     if (oversizedFiles.length > 0) {
       setNotification({
@@ -435,10 +414,8 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
       return;
     }
     
-    // Adicionar aos anexos atuais
     setAttachments(prev => [...prev, ...files]);
     
-    // Resetar input para permitir selecionar o mesmo arquivo novamente
     e.target.value = '';
   };
 
@@ -446,20 +423,16 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Função de envio de mensagem otimizada com useCallback
   const handleSendMessage = useCallback(async () => {
     if (!messageInput.trim() && attachments.length === 0) return;
     
     setIsSending(true);
     
-    // Criar ID temporário para mensagem otimista
     const optimisticId = `temp-${Date.now()}`;
     
-    // Texto da mensagem atual
     const currentMessage = messageInput;
     setMessageInput('');
     
-    // Criar objeto de mensagem
     const messageObj = {
       type: 'CHAT',
       chamadoId: chamadoId,
@@ -469,10 +442,8 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
       timestamp: new Date().toISOString()
     };
     
-    // Criar cópias dos anexos para a mensagem otimista
     const currentAttachments = [...attachments];
     
-    // Mostrar anexos na mensagem otimista
     const optimisticAttachments = currentAttachments.map((file, index) => ({
       id: `temp-attachment-${index}`,
       fileName: file.name,
@@ -482,10 +453,8 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
       url: URL.createObjectURL(file)
     }));
     
-    // Limpar anexos atuais
     setAttachments([]);
     
-    // Criar mensagem otimista para mostrar imediatamente
     const optimisticMessage = {
       ...messageObj,
       id: optimisticId,
@@ -494,56 +463,39 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
       attachments: optimisticAttachments
     };
     
-    // Adicionar mensagem otimista à lista
     setMessages(prev => [...prev, optimisticMessage]);
     
     try {
       let success = false;
       
-      // Tentar enviar via WebSocket (apenas mensagem de texto, sem anexos)
       if (isWebSocketEnabled && websocketService.isConnected && currentAttachments.length === 0) {
         try {
           success = websocketService.sendMessage(chamadoId, messageObj);
-          console.log('Mensagem enviada via WebSocket:', success);
         } catch (wsError) {
-          console.error('Erro ao enviar mensagem via WebSocket:', wsError);
           success = false;
         }
       }
       
-      // Se falhar ou tiver anexos, enviar via API
       if (!success || currentAttachments.length > 0) {
-        console.log('Enviando mensagem via API');
-        
-        // Criar FormData para envio da mensagem com anexos
         const formData = new FormData();
         formData.append('conteudo', currentMessage);
         
-        // Adicionar anexos ao FormData
         currentAttachments.forEach(file => {
           formData.append('anexos', file);
         });
         
-        // Enviar para a API
         await chamadoService.enviarMensagemComAnexos(chamadoId, formData);
         
-        // Remover mensagem otimista
         setMessages(prev => prev.filter(m => m.id !== optimisticId));
         
-        // Atualizar mensagens
         throttledFetchMessages(true);
       }
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      
-      // Remover mensagem otimista em caso de erro
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
       
-      // Restaurar input e anexos
       setMessageInput(currentMessage);
       setAttachments(currentAttachments);
       
-      // Exibir notificação de erro
       setNotification({
         open: true,
         message: 'Não foi possível enviar a mensagem. Tente novamente.',
@@ -554,7 +506,6 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     }
   }, [messageInput, chamadoId, auth.user?.id, auth.user?.name, auth.user?.username, throttledFetchMessages, isWebSocketEnabled, attachments]);
 
-  // Handler para tecla Enter otimizado
   const handleKeyPress = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -562,12 +513,10 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     }
   }, [handleSendMessage]);
 
-  // Handler para fechamento de notificação
   const handleCloseNotification = useCallback(() => {
     setNotification(prev => ({ ...prev, open: false }));
   }, []);
 
-  // Handler para atualizar mensagens
   const handleRefreshMessages = useCallback(() => {
     throttledFetchMessages();
 
@@ -576,10 +525,8 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     }
   }, [throttledFetchMessages, connectWebSocket, isWebSocketEnabled]);
 
-  // Verificar se o chat está desativado
   const isChatDisabled = chamadoStatus !== 'EM_ATENDIMENTO';
 
-  // Iniciar upload de diferentes tipos
   const handleUploadPhoto = useCallback(() => {
     fileInputRef.current.accept = 'image/*';
     fileInputRef.current.click();
@@ -598,7 +545,6 @@ const MemoizedChatComponent = ({ chamadoId, chamadoStatus }) => {
     handleAttachmentMenuClose();
   }, []);
 
-  // Helper para determinar o ícone correto para o anexo
   const getAttachmentIcon = useCallback((file) => {
     if (file.type.startsWith('image/')) {
       return <ImageIcon />;
