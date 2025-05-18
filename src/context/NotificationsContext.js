@@ -1,7 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AuthContext from './AuthContext';
-import notificationService from '../api/notificationService';
-import notificationWebSocketService from '../api/notificationWebSocketService';
+import notificationWebSocketService from '../services/notificationWebSocketService';
 
 const NotificationsContext = createContext();
 
@@ -18,7 +17,9 @@ export const NotificationsProvider = ({ children }) => {
     
     setLoading(true);
     try {
-      const data = await notificationService.getUnreadNotifications();
+      // Em uma implementação completa, você chamaria sua API aqui
+      // const data = await notificationService.getUnreadNotifications();
+      const data = [];
       if (Array.isArray(data)) {
         setNotifications(data);
         setUnreadCount(data.filter(n => !n.read).length);
@@ -33,7 +34,8 @@ export const NotificationsProvider = ({ children }) => {
   // Marcar uma notificação como lida
   const markAsRead = async (notificationId) => {
     try {
-      await notificationService.markAsRead(notificationId);
+      // Em uma implementação completa, você chamaria sua API aqui
+      // await notificationService.markAsRead(notificationId);
       
       setNotifications(prevNotifications => 
         prevNotifications.map(n => 
@@ -51,7 +53,8 @@ export const NotificationsProvider = ({ children }) => {
   // Marcar todas as notificações como lidas
   const markAllAsRead = async () => {
     try {
-      await notificationService.markAllAsRead();
+      // Em uma implementação completa, você chamaria sua API aqui
+      // await notificationService.markAllAsRead();
       
       setNotifications(prevNotifications => 
         prevNotifications.map(n => ({ ...n, read: true }))
@@ -119,6 +122,20 @@ export const NotificationsProvider = ({ children }) => {
     );
   };
 
+  // Função para adicionar uma notificação de teste
+  const addDummyNotification = () => {
+    const dummyNotification = {
+      id: `dummy-${Date.now()}`,
+      message: 'Esta é uma notificação de teste',
+      type: 'TEST',
+      chamadoId: null,
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+    
+    addNotification(dummyNotification);
+  };
+
   // Efeito para iniciar carregamento de notificações e setup de WebSocket
   useEffect(() => {
     if (auth.isAuthenticated) {
@@ -150,7 +167,8 @@ export const NotificationsProvider = ({ children }) => {
     markAsRead,
     markAllAsRead,
     refreshNotifications: fetchNotifications,
-    addNotification
+    addNotification,
+    addDummyNotification
   };
 
   return (

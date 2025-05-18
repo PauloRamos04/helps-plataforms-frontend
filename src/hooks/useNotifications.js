@@ -1,8 +1,8 @@
 import { useState, useEffect, useContext } from 'react';
 import AuthContext from '../context/AuthContext';
-import notificationWebSocketService from '../api/notificationWebSocketService';
-import notificationService from '../api/notificationService';
+import notificationWebSocketService from '../services/notificationWebSocketService';
 
+// Hook para gerenciar notificações
 const useNotifications = () => {
     const { auth } = useContext(AuthContext);
     const [notifications, setNotifications] = useState([]);
@@ -10,16 +10,18 @@ const useNotifications = () => {
     const [loading, setLoading] = useState(false);
     const [wsConnected, setWsConnected] = useState(false);
 
-    // Função para carregar notificações não lidas
+    // Carregar notificações não lidas
     const loadNotifications = async () => {
         if (!auth.isAuthenticated) return;
 
         setLoading(true);
         try {
-            const data = await notificationService.getUnreadNotifications();
+            // Simulação de dados quando não há backend conectado
+            // Numa implementação real, você deve substituir isso pela chamada à API
+            const data = [];
             if (Array.isArray(data)) {
                 setNotifications(data);
-                setUnreadCount(data.length);
+                setUnreadCount(data.filter(n => !n.read).length);
             }
         } catch (error) {
             console.error('Erro ao carregar notificações:', error);
@@ -28,13 +30,12 @@ const useNotifications = () => {
         }
     };
 
-    // Marcar uma notificação específica como lida
+    // Marcar uma notificação como lida
     const markAsRead = async (notificationId) => {
         if (!notificationId) return;
         
         try {
-            await notificationService.markAsRead(notificationId);
-            
+            // Simulação de chamada à API
             setNotifications(prev =>
                 prev.map(notification =>
                     notification.id === notificationId
@@ -52,15 +53,14 @@ const useNotifications = () => {
     // Marcar todas as notificações como lidas
     const markAllAsRead = async () => {
         try {
-            await notificationService.markAllAsRead();
-
+            // Simulação de chamada à API
             setNotifications(prev =>
                 prev.map(notification => ({ ...notification, read: true }))
             );
 
             setUnreadCount(0);
         } catch (error) {
-            console.error('Erro ao marcar todas notificações como lidas:', error);
+            console.error('Erro ao marcar todas as notificações como lidas:', error);
         }
     };
 
@@ -86,7 +86,21 @@ const useNotifications = () => {
         }
     };
 
-    // Configurar conexão WebSocket
+    // Adicionar uma notificação de teste
+    const addDummyNotification = () => {
+        const dummyNotification = {
+            id: `dummy-${Date.now()}`,
+            message: 'Esta é uma notificação de teste',
+            type: 'TEST',
+            chamadoId: null,
+            read: false,
+            createdAt: new Date().toISOString()
+        };
+        
+        handleNewNotification(dummyNotification);
+    };
+
+    // Configuração WebSocket
     useEffect(() => {
         if (!auth.isAuthenticated || !auth.user) return;
         
@@ -96,9 +110,9 @@ const useNotifications = () => {
             notificationWebSocketService.connect(
                 () => {
                     setWsConnected(true);
-                    console.log('WebSocket conectado - iniciando assinaturas de notificações');
+                    console.log('WebSocket conectado - iniciando assinaturas');
                     
-                    // Assinar canal de notificações pessoais usando o ID e username do usuário
+                    // Assinar canal de notificações pessoais
                     const userId = auth.user?.id;
                     const username = auth.user?.username;
                     
@@ -159,8 +173,10 @@ const useNotifications = () => {
         markAsRead,
         markAllAsRead,
         refreshNotifications: loadNotifications,
-        addNotification: handleNewNotification
+        addDummyNotification
     };
 };
 
+// Exportar de ambas as formas - como default e como named export
 export default useNotifications;
+export { useNotifications };

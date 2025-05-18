@@ -1,17 +1,19 @@
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8080',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   },
-  withCredentials: true,
   timeout: 15000
 });
 
-// Add a request interceptor to attach the token to every request
+// Add request interceptor
 api.interceptors.request.use(
   (config) => {
+    // Add token to requests if available
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -23,16 +25,14 @@ api.interceptors.request.use(
   }
 );
 
-// Add a response interceptor to handle auth errors
+// Add response interceptor
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error) => {
-    // Handle 401 Unauthorized errors by logging out
+    // Handle unauthorized error (401) - logout and redirect to login
     if (error.response && error.response.status === 401) {
-      // Save the current URL to redirect back after login
-      localStorage.setItem('redirect_after_login', window.location.pathname);
-      
-      // Clear auth data
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       
@@ -41,7 +41,12 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    return Promise.reject(error);
+    
+    return Promise.reject({
+      message: error.response?.data?.message || error.message || 'Ocorreu um erro',
+      status: error.response?.status,
+      data: error.response?.data
+    });
   }
 );
 

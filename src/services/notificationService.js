@@ -6,6 +6,7 @@ const notificationService = {
       const response = await api.get('/notifications/unread');
       return response.data;
     } catch (error) {
+      console.error("Error fetching unread notifications:", error);
       return [];
     }
   },
@@ -15,6 +16,7 @@ const notificationService = {
       const response = await api.get('/notifications');
       return response.data;
     } catch (error) {
+      console.error("Error fetching all notifications:", error);
       throw error;
     }
   },
@@ -24,6 +26,7 @@ const notificationService = {
       const response = await api.patch(`/notifications/${notificationId}/read`);
       return response.data;
     } catch (error) {
+      console.error(`Error marking notification ${notificationId} as read:`, error);
       throw error;
     }
   },
@@ -33,6 +36,7 @@ const notificationService = {
       const response = await api.patch('/notifications/mark-all-read');
       return response.data;
     } catch (error) {
+      console.error("Error marking all notifications as read:", error);
       throw error;
     }
   },
@@ -42,6 +46,7 @@ const notificationService = {
       const response = await api.get('/notifications/count');
       return response.data;
     } catch (error) {
+      console.error("Error getting notification count:", error);
       return { total: 0, unread: 0 };
     }
   },
@@ -57,6 +62,7 @@ const notificationService = {
       const response = await api.post('/notifications/test', payload);
       return response.data;
     } catch (error) {
+      console.error("Error creating test notification:", error);
       throw error;
     }
   }

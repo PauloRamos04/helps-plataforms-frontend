@@ -1,32 +1,12 @@
 import React, { useState, useContext, useEffect } from 'react';
 import {
   Box, Typography, Paper, TextField,
-  Button, Link, Alert, CircularProgress
+  Button, Alert, CircularProgress
 } from '@mui/material';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 import alaresLogo from '../assets/alares.png';
-
-// Define validation functions directly in this component
-const validateRequired = (value, fieldName) => {
-  if (!value || (typeof value === 'string' && !value.trim())) {
-    return `${fieldName} é obrigatório`;
-  }
-  return '';
-};
-
-const validateUsername = (value) => {
-  if (!value) return '';
-
-  if (value.length < 3) {
-    return 'Nome de usuário deve ter pelo menos 3 caracteres';
-  }
-  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
-    return 'Nome de usuário deve conter apenas letras, números e underscores';
-  }
-
-  return '';
-};
+import { validateRequired, validateUsername, validatePassword } from '../utils/validationUtils';
 
 function Login() {
   const navigate = useNavigate();
@@ -89,14 +69,7 @@ function Login() {
     try {
       setLoading(true);
 
-      // Create login request object as expected by the backend
-      const loginRequest = {
-        username: formData.username,
-        password: formData.password
-      };
-
-      // Send login request to backend
-      const result = await login(loginRequest);
+      const result = await login(formData);
 
       if (result.success) {
         navigate('/dashboard');
@@ -104,7 +77,6 @@ function Login() {
         setLoginError(result.message || 'Credenciais inválidas');
       }
     } catch (error) {
-      console.error('Login error:', error);
       setLoginError('Ocorreu um erro durante o login. Por favor, tente novamente.');
     } finally {
       setLoading(false);
@@ -167,7 +139,7 @@ function Login() {
           />
         </Box>
 
-        {/* Title "Ei, dá um Helps!" */}
+        {/* Title */}
         <Box sx={{ mb: 4, textAlign: 'center' }}>
           <Typography
             variant="h4"
@@ -238,10 +210,6 @@ function Login() {
                   borderColor: '#4966f2',
                   borderWidth: '2px',
                 },
-              },
-              '& .MuiFormHelperText-root': {
-                margin: '4px 0 0 14px',
-                fontSize: '0.7rem',
               }
             }}
           />
@@ -269,10 +237,6 @@ function Login() {
                   borderColor: '#4966f2',
                   borderWidth: '2px',
                 },
-              },
-              '& .MuiFormHelperText-root': {
-                margin: '4px 0 0 14px',
-                fontSize: '0.7rem',
               }
             }}
           />
@@ -300,11 +264,6 @@ function Login() {
           >
             {loading ? <CircularProgress size={24} color="inherit" /> : 'Entrar'}
           </Button>
-
-          {/* Optional: Forgot password link */}
-          <Typography variant="body2" sx={{ mt: 3, color: '#666', textAlign: 'center' }}>
-            Esqueceu sua senha? <Box component="span" sx={{ color: '#4966f2', cursor: 'pointer', fontWeight: 500 }}>Recuperar acesso</Box>
-          </Typography>
         </Box>
       </Paper>
     </Box>

@@ -5,13 +5,15 @@ import {
   Alert, Snackbar, IconButton, CircularProgress
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { chamadoService } from '../api/chamadoService';
-import AuthContext from '../context/AuthContext';
-import NotificationsContext from '../context/NotificationsContext';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
+import AuthContext from '../context/AuthContext';
+import NotificationsContext from '../context/NotificationsContext';
+import { ticketService } from '../services/ticketService';
+import PageHeader from '../components/common/PageHeader';
+import { validateRequired } from '../utils/validationUtils';
 
-function NovoChamado() {
+function NewTicket() {
   const navigate = useNavigate();
   const { auth } = useContext(AuthContext);
   const notificationsContext = useContext(NotificationsContext);
@@ -23,6 +25,7 @@ function NovoChamado() {
     category: '',
   });
 
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [openSnackbar, setOpenSnackbar] = useState(false);
@@ -35,6 +38,14 @@ function NovoChamado() {
       ...prev,
       [name]: value
     }));
+    
+    // Clear the error for this field
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
   };
 
   const handleFileSelect = (event) => {
@@ -42,12 +53,12 @@ function NovoChamado() {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setError('Only image files are allowed');
+      setError('Apenas arquivos de imagem são permitidos');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setError('File size should be less than 5MB');
+      setError('O arquivo deve ter menos de 5MB');
       return;
     }
 
@@ -58,8 +69,8 @@ function NovoChamado() {
       setImagePreview(reader.result);
     };
     reader.onerror = () => {
-      console.error("FileReader error:", reader.error);
-      setError('Error reading the selected file');
+      console.error("Erro ao ler o arquivo:", reader.error);
+      setError('Erro ao ler o arquivo selecionado');
     };
     reader.readAsDataURL(file);
   };
@@ -72,22 +83,39 @@ function NovoChamado() {
     }
   };
 
+  const validateForm = () => {
+    const newErrors = {};
+    
+    // Validate title
+    const titleError = validateRequired(formData.title, 'Título');
+    if (titleError) newErrors.title = titleError;
+    
+    // Check title length
+    if (formData.title && (formData.title.length < 5 || formData.title.length > 100)) {
+      newErrors.title = "O título deve ter entre 5 e 100 caracteres";
+    }
+    
+    // Validate description
+    const descriptionError = validateRequired(formData.description, 'Descrição');
+    if (descriptionError) newErrors.description = descriptionError;
+    
+    // Check description length
+    if (formData.description && (formData.description.length < 10 || formData.description.length > 1000)) {
+      newErrors.description = "A descrição deve ter entre 10 e 1000 caracteres";
+    }
+    
+    // Validate category
+    const categoryError = validateRequired(formData.category, 'Categoria');
+    if (categoryError) newErrors.category = categoryError;
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate required fields according to DTO constraints
-    if (!formData.title || formData.title.length < 5 || formData.title.length > 100) {
-      setError("Title is required and must be between 5-100 characters");
-      return;
-    }
-
-    if (!formData.description || formData.description.length < 10 || formData.description.length > 1000) {
-      setError("Description is required and must be between 10-1000 characters");
-      return;
-    }
-
-    if (!formData.category) {
-      setError("Category is required");
+    if (!validateForm()) {
       return;
     }
 
@@ -100,41 +128,40 @@ function NovoChamado() {
       formDataToSend.append('title', formData.title);
       formDataToSend.append('description', formData.description);
       formDataToSend.append('category', formData.category);
-      formDataToSend.append('openingDate', new Date().toISOString());
 
       // Only append image if one is selected
       if (selectedImage) {
         formDataToSend.append('image', selectedImage);
       }
 
-      // Call the appropriate endpoint based on whether an image is included
-      const response = await chamadoService.createChamadoWithImage(formDataToSend);
+      // Call the appropriate endpoint
+      const response = await ticketService.createTicketWithImage(formDataToSend);
 
       setOpenSnackbar(true);
 
-      // Add notification
+      // Add notification if context is available
       if (notificationsContext && typeof notificationsContext.addNotification === 'function') {
         try {
           notificationsContext.addNotification({
-            message: `New ticket created: ${formData.title}`,
+            message: `Novo chamado criado: ${formData.title}`,
             type: 'NOVO_CHAMADO',
             read: false,
-            chamadoId: response.id || 1,
+            chamadoId: response.id,
             createdAt: new Date().toISOString(),
             categoria: formData.category
           });
         } catch (notifError) {
-          console.warn("Failed to add notification:", notifError);
+          console.warn("Falha ao adicionar notificação:", notifError);
         }
       }
 
       // Navigate after a brief delay
       setTimeout(() => {
-        navigate('/chamados');
+        navigate('/tickets');
       }, 1500);
     } catch (error) {
-      console.error('Error creating ticket:', error);
-      setError(`Error creating ticket: ${error.message || 'Unknown error'}`);
+      console.error('Erro ao criar chamado:', error);
+      setError(`Erro ao criar chamado: ${error.message || 'Erro desconhecido'}`);
     } finally {
       setLoading(false);
     }
@@ -154,9 +181,10 @@ function NovoChamado() {
           mb: 3
         }}
       >
-        <Typography variant="h6" component="h1" sx={{ mb: 3, fontWeight: 'medium' }}>
-          New Ticket
-        </Typography>
+        <PageHeader 
+          title="Novo Chamado" 
+          backUrl="/tickets"
+        />
 
         {error && (
           <Alert
@@ -172,19 +200,20 @@ function NovoChamado() {
           {/* Title field */}
           <TextField
             fullWidth
-            label="Title"
+            label="Título"
             name="title"
             value={formData.title}
             onChange={handleChange}
             margin="normal"
             required
             inputProps={{ minLength: 5, maxLength: 100 }}
-            helperText="Title must be between 5-100 characters"
+            helperText={errors.title || "O título deve ter entre 5-100 caracteres"}
+            error={!!errors.title}
             sx={{ mb: 2, '.MuiOutlinedInput-root': { bgcolor: 'white' } }}
           />
 
           {/* Category field */}
-          <FormControl fullWidth margin="normal" sx={{ mb: 2 }}>
+          <FormControl fullWidth margin="normal" sx={{ mb: 2 }} error={!!errors.category}>
             <InputLabel id="category-label">Categoria *</InputLabel>
             <Select
               labelId="category-label"
@@ -200,6 +229,11 @@ function NovoChamado() {
               <MenuItem value="FINANCEIRO">FINANCEIRO</MenuItem>
               <MenuItem value="TÉCNICO">TÉCNICO</MenuItem>
             </Select>
+            {errors.category && (
+              <Typography variant="caption" color="error" sx={{ ml: 2, mt: 0.5 }}>
+                {errors.category}
+              </Typography>
+            )}
           </FormControl>
 
           {/* Description field */}
@@ -216,14 +250,15 @@ function NovoChamado() {
               fullWidth
               multiline
               rows={6}
-              label="Description"
-              placeholder="Describe your request here..."
+              label="Descrição"
+              placeholder="Descreva sua solicitação aqui..."
               name="description"
               value={formData.description}
               onChange={handleChange}
               required
               inputProps={{ minLength: 10, maxLength: 1000 }}
-              helperText="Description must be between 10-1000 characters"
+              helperText={errors.description || "A descrição deve ter entre 10-1000 caracteres"}
+              error={!!errors.description}
               variant="outlined"
               sx={{
                 '.MuiOutlinedInput-root': {
@@ -253,7 +288,7 @@ function NovoChamado() {
                   color: '#666'
                 }}
               >
-                Attach Image
+                Anexar Imagem
               </Button>
 
               {imagePreview && (
@@ -261,7 +296,7 @@ function NovoChamado() {
                   <Box sx={{ position: 'relative', mr: 2 }}>
                     <img
                       src={imagePreview}
-                      alt="Selected"
+                      alt="Selecionada"
                       style={{
                         height: '40px',
                         borderRadius: '4px'
@@ -305,7 +340,7 @@ function NovoChamado() {
               {loading ? (
                 <CircularProgress size={24} color="inherit" />
               ) : (
-                'Submit Ticket'
+                'Enviar Chamado'
               )}
             </Button>
           </Box>
@@ -319,11 +354,11 @@ function NovoChamado() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
-          Ticket created successfully!
+          Chamado criado com sucesso!
         </Alert>
       </Snackbar>
     </Box>
   );
 }
 
-export default NovoChamado;
+export default NewTicket;

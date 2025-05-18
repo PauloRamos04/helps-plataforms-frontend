@@ -1,73 +1,80 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { 
   Box, Container, Typography, Grid, Paper, Card, CardContent, 
-  CardHeader, List, ListItem, ListItemText, Divider, CircularProgress
+  List, ListItem, ListItemText, Divider, CircularProgress,
+  Link, Button
 } from '@mui/material';
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
-import { chamadoService } from '../api/chamadoService'; // Importação corrigida
+import { ticketService } from '../services/ticketService';
+import PageHeader from '../components/common/PageHeader';
+import StatusBadge from '../components/tickets/StatusBadge';
+import { formatDate } from '../utils/dateUtils';
+import ErrorHandler from '../components/common/ErrorHandler';
 
 function Dashboard() {
   const { auth } = useContext(AuthContext);
-  const [chamados, setChamados] = useState([]);
+  const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [estatisticas, setEstatisticas] = useState({
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
     total: 0,
-    abertos: 0,
-    emAtendimento: 0,
-    fechados: 0
+    open: 0,
+    inProgress: 0,
+    closed: 0
   });
 
-  const isHelper = auth.user && auth.user.roles && auth.user.roles.includes('ROLE_HELPER');
+  const isHelper = auth.user?.roles?.includes('HELPER') || 
+                   auth.user?.roles?.includes('ROLE_HELPER');
 
   useEffect(() => {
-    fetchChamados();
+    fetchTickets();
   }, []);
 
-  const fetchChamados = async () => {
+  const fetchTickets = async () => {
     try {
       setLoading(true);
-      const data = await chamadoService.getChamados();
-      setChamados(data);
+      setError(null);
+      const data = await ticketService.getChamados();
+      setTickets(data);
       
-      // Calcular estatísticas
-      const estatisticas = {
+      // Calculate stats
+      const stats = {
         total: data.length,
-        abertos: data.filter(c => c.status === 'ABERTO').length,
-        emAtendimento: data.filter(c => c.status === 'EM_ATENDIMENTO').length,
-        fechados: data.filter(c => c.status === 'FECHADO').length
+        open: data.filter(t => t.status === 'ABERTO').length,
+        inProgress: data.filter(t => t.status === 'EM_ATENDIMENTO').length,
+        closed: data.filter(t => t.status === 'FECHADO').length
       };
-      setEstatisticas(estatisticas);
+      setStats(stats);
     } catch (error) {
-      console.error('Erro ao carregar chamados:', error);
+      console.error('Error loading tickets:', error);
+      setError('Não foi possível carregar os chamados. Tente novamente mais tarde.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'ABERTO':
-        return 'Aberto';
-      case 'EM_ATENDIMENTO':
-        return 'Em Atendimento';
-      case 'FECHADO':
-        return 'Fechado';
-      default:
-        return status;
-    }
-  };
-
-  const formatDate = (dateString) => {
-    const options = { day: '2-digit', month: '2-digit', year: 'numeric' };
-    return new Date(dateString).toLocaleDateString('pt-BR', options);
-  };
-
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Dashboard
-      </Typography>
+      <PageHeader 
+        title="Dashboard"
+        actionButton={
+          <Link component={RouterLink} to="/tickets/new" underline="none">
+            <Button
+              variant="contained"
+              sx={{
+                bgcolor: '#4966f2',
+                borderRadius: '4px',
+                textTransform: 'none'
+              }}
+            >
+              Novo Chamado
+            </Button>
+          </Link>
+        }
+      />
+      
+      {error && <ErrorHandler message={error} onRetry={fetchTickets} />}
       
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -76,7 +83,7 @@ function Dashboard() {
       ) : (
         <>
           <Grid container spacing={3}>
-            {/* Cards de estatísticas */}
+            {/* Stat cards */}
             <Grid item xs={12} sm={6} md={3}>
               <Paper
                 sx={{
@@ -91,7 +98,7 @@ function Dashboard() {
                   Total de Chamados
                 </Typography>
                 <Typography component="p" variant="h4">
-                  {estatisticas.total}
+                  {stats.total}
                 </Typography>
               </Paper>
             </Grid>
@@ -109,7 +116,7 @@ function Dashboard() {
                   Chamados Abertos
                 </Typography>
                 <Typography component="p" variant="h4">
-                  {estatisticas.abertos}
+                  {stats.open}
                 </Typography>
               </Paper>
             </Grid>
@@ -127,7 +134,7 @@ function Dashboard() {
                   Em Atendimento
                 </Typography>
                 <Typography component="p" variant="h4">
-                  {estatisticas.emAtendimento}
+                  {stats.inProgress}
                 </Typography>
               </Paper>
             </Grid>
@@ -145,44 +152,48 @@ function Dashboard() {
                   Chamados Fechados
                 </Typography>
                 <Typography component="p" variant="h4">
-                  {estatisticas.fechados}
+                  {stats.closed}
                 </Typography>
               </Paper>
             </Grid>
             
-            {/* Últimos chamados */}
+            {/* Recent tickets */}
             <Grid item xs={12}>
               <Card>
-                <CardHeader title="Últimos Chamados" />
                 <CardContent>
-                  {chamados.length > 0 ? (
+                  <Typography variant="h6" gutterBottom>
+                    Últimos Chamados
+                  </Typography>
+                  {tickets.length > 0 ? (
                     <List>
-                      {chamados.slice(0, 5).map((chamado, index) => (
-                        <React.Fragment key={chamado.id}>
+                      {tickets.slice(0, 5).map((ticket) => (
+                        <React.Fragment key={ticket.id}>
                           <ListItem 
                             button 
-                            component={Link} 
-                            to={`/chamados/${chamado.id}`}
+                            component={RouterLink} 
+                            to={`/tickets/${ticket.id}`}
+                            sx={{ py: 1.5 }}
                           >
                             <ListItemText
-                              primary={chamado.titulo}
+                              primary={ticket.title || ticket.titulo}
                               secondary={
-                                <>
+                                <Box display="flex" justifyContent="space-between" alignItems="center" mt={0.5}>
                                   <Typography component="span" variant="body2" color="text.primary">
-                                    Status: {getStatusLabel(chamado.status)}
+                                    <StatusBadge status={ticket.status} />
                                   </Typography>
-                                  {" — "}
-                                  {formatDate(chamado.dataCriacao)}
-                                </>
+                                  <Typography component="span" variant="caption" color="text.secondary">
+                                    {formatDate(ticket.openingDate || ticket.dataCriacao)}
+                                  </Typography>
+                                </Box>
                               }
                             />
                           </ListItem>
-                          {index < Math.min(chamados.length - 1, 4) && <Divider />}
+                          <Divider />
                         </React.Fragment>
                       ))}
                     </List>
                   ) : (
-                    <Typography variant="body1" color="text.secondary">
+                    <Typography variant="body1" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
                       Nenhum chamado encontrado.
                     </Typography>
                   )}
@@ -190,35 +201,38 @@ function Dashboard() {
               </Card>
             </Grid>
             
-            {/* Conteúdo específico para helpers */}
+            {/* Helper-specific content */}
             {isHelper && (
               <Grid item xs={12}>
                 <Card>
-                  <CardHeader title="Chamados Disponíveis para Atendimento" />
                   <CardContent>
-                    {chamados.filter(c => c.status === 'ABERTO').length > 0 ? (
+                    <Typography variant="h6" gutterBottom>
+                      Chamados Disponíveis para Atendimento
+                    </Typography>
+                    {tickets.filter(t => t.status === 'ABERTO').length > 0 ? (
                       <List>
-                        {chamados
-                          .filter(c => c.status === 'ABERTO')
+                        {tickets
+                          .filter(t => t.status === 'ABERTO')
                           .slice(0, 5)
-                          .map((chamado, index) => (
-                            <React.Fragment key={chamado.id}>
+                          .map((ticket) => (
+                            <React.Fragment key={ticket.id}>
                               <ListItem 
                                 button 
-                                component={Link} 
-                                to={`/chamados/${chamado.id}`}
+                                component={RouterLink} 
+                                to={`/tickets/${ticket.id}`}
+                                sx={{ py: 1.5 }}
                               >
                                 <ListItemText
-                                  primary={chamado.titulo}
-                                  secondary={formatDate(chamado.dataCriacao)}
+                                  primary={ticket.title || ticket.titulo}
+                                  secondary={formatDate(ticket.openingDate || ticket.dataCriacao)}
                                 />
                               </ListItem>
-                              {index < Math.min(chamados.filter(c => c.status === 'ABERTO').length - 1, 4) && <Divider />}
+                              <Divider />
                             </React.Fragment>
                           ))}
                       </List>
                     ) : (
-                      <Typography variant="body1" color="text.secondary">
+                      <Typography variant="body1" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
                         Não há chamados abertos no momento.
                       </Typography>
                     )}

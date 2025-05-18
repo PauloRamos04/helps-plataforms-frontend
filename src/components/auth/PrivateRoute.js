@@ -1,10 +1,10 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import AuthContext from '../context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
+import AuthContext from '../../context/AuthContext';
 
-const PrivateRoute = ({ children }) => {
-  const { auth, isLoading } = useContext(AuthContext);
+const PrivateRoute = ({ children, requiredRole }) => {
+  const { auth, isLoading, hasRole } = useContext(AuthContext);
   const location = useLocation();
   
   // State for direct localStorage check
@@ -19,8 +19,6 @@ const PrivateRoute = ({ children }) => {
       try {
         const token = localStorage.getItem('token');
         const hasAuth = !!token;
-        
-        console.log(`[PrivateRoute] Path: ${location.pathname}, Direct token check:`, hasAuth);
         
         setDirectAuthCheck({
           isDone: true,
@@ -49,12 +47,15 @@ const PrivateRoute = ({ children }) => {
   
   // If authentication fails from either context or direct check, redirect to login
   if (!auth.isAuthenticated && !directAuthCheck.isAuthenticated) {
-    console.log('[PrivateRoute] Not authenticated, redirecting to login');
     return <Navigate to="/login" />;
   }
   
-  // If authenticated by either method, render children
-  console.log('[PrivateRoute] Authenticated, rendering protected route');
+  // Check for required role if specified
+  if (requiredRole && !hasRole(requiredRole)) {
+    return <Navigate to="/dashboard" />;
+  }
+  
+  // If authenticated, render children
   return children;
 };
 

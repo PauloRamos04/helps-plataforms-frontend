@@ -1,72 +1,63 @@
-import api from '../api';
+import api from './api';
 
 export const userService = {
+  // Get all users
   getAllUsers: async () => {
     try {
       const response = await api.get('/admin/users');
       return response.data;
     } catch (error) {
-      console.error('Erro ao buscar usuários:', error);
       throw error;
     }
   },
 
+  // Get user by ID
   getUserById: async (id) => {
     try {
       const response = await api.get(`/admin/users/${id}`);
       return response.data;
     } catch (error) {
-      console.error(`Erro ao buscar usuário ${id}:`, error);
       throw error;
     }
   },
   
-  createUserWithRole: async (userData) => {
+  // Create a new user
+  createUser: async (userData) => {
     try {
-      console.log('Enviando dados para criar usuário:', userData);
-      
       const response = await api.post('/admin/users', userData);
       return response.data;
     } catch (error) {
-      console.error('Erro ao criar usuário:', error);
-      console.error('Resposta de erro:', error.response?.data);
       throw error;
     }
   },
   
+  // Update a user
   updateUser: async (id, userData) => {
     try {
-      console.log('Enviando dados para atualizar usuário:', userData);
-      
       const response = await api.put(`/admin/users/${id}`, userData);
-
       return response.data;
     } catch (error) {
-      console.error(`Erro ao atualizar usuário ${id}:`, error);
-      console.error('Resposta de erro:', error.response?.data);
       throw error;
     }
   },
   
+  // Delete a user
   deleteUser: async (id) => {
     try {
       const response = await api.delete(`/admin/users/${id}`);
       return response.data;
     } catch (error) {
-      console.error(`Erro ao deletar usuário ${id}:`, error);
       throw error;
     }
   },
   
+  // Update user status (active/inactive)
   updateUserStatus: async (id, enabled) => {
     try {
       const response = await api.patch(`/admin/users/${id}/status`, { enabled });
       return response.data;
     } catch (error) {
-      console.error(`Erro ao atualizar status do usuário ${id}:`, error);
       throw error;
     }
   }
 };
-
-export default userService;

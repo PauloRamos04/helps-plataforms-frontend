@@ -1,47 +1,19 @@
-import React, { useContext, lazy, Suspense } from 'react';
+// src/routes.js
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-
-import Layout from './components/common/Layout';
+import Layout from './components/layout/Layout'; // Caminho atualizado
 import Login from './pages/Login';
-import AuthContext from './context/AuthContext';
-import PrivateRoute from './context/PrivateRoute';
+import PrivateRoute from './components/auth/PrivateRoute'; // Caminho atualizado
+import LoadingFallback from './components/common/LoadingFallback';
 
-// Loading component para mostrar durante o carregamento lazy
-const LoadingFallback = () => (
-  <div style={{
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: 'calc(100vh - 64px)'
-  }}>
-    <div className="loading-spinner"></div>
-  </div>
-);
-
-// Lazy loading de componentes para melhorar performance
+// Lazy loading de componentes
 const Dashboard = lazy(() => import('./pages/Dashboard'));
-const ChamadosList = lazy(() => import('./pages/SolicitacoesList'));
-const ChamadoDetail = lazy(() => import('./pages/ChamadoDetail'));
-const ChamadoNew = lazy(() => import('./pages/NovoChamado'));
-const GerenciaUser = lazy(() => import('./pages/GerenciaUser'));
+const TicketsList = lazy(() => import('./pages/TicketsList')); // Nome atualizado
+const TicketDetail = lazy(() => import('./pages/TicketDetail')); // Nome atualizado
+const NewTicket = lazy(() => import('./pages/NewTicket')); // Nome atualizado
+const UserManagement = lazy(() => import('./pages/UserManagement')); // Nome atualizado
 
 const AppRoutes = () => {
-  const { auth } = useContext(AuthContext);
-  
-  const isAdmin = () => {
-    return auth.user?.roles?.some(role => 
-      role === 'ADMIN' || 
-      role === 'ROLE_ADMIN'
-    );
-  };
-  
-  const isHelper = () => {
-    return auth.user?.roles?.some(role => 
-      role === 'HELPER' || 
-      role === 'ROLE_HELPER'
-    );
-  };
-
   return (
     <BrowserRouter>
       <Routes>
@@ -54,43 +26,36 @@ const AppRoutes = () => {
         }>
           <Route index element={<Navigate to="/dashboard" replace />} />
           
-          {/* Rotas com Lazy Loading */}
           <Route path="dashboard" element={
             <Suspense fallback={<LoadingFallback />}>
               <Dashboard />
             </Suspense>
           } />
           
-          <Route path="chamados" element={
+          <Route path="tickets" element={
             <Suspense fallback={<LoadingFallback />}>
-              <ChamadosList />
+              <TicketsList />
             </Suspense>
           } />
           
-          <Route path="chamados/:id" element={
+          <Route path="tickets/:id" element={
             <Suspense fallback={<LoadingFallback />}>
-              <ChamadoDetail />
+              <TicketDetail />
             </Suspense>
           } />
           
-          <Route path="chamados/new" element={
+          <Route path="tickets/new" element={
             <Suspense fallback={<LoadingFallback />}>
-              <ChamadoNew />
+              <NewTicket />
             </Suspense>
           } />
           
-          <Route path="novo-chamado" element={
-            <Suspense fallback={<LoadingFallback />}>
-              <ChamadoNew />
-            </Suspense>
-          } />
-          
-          <Route path="admin/usuarios" element={
-            isAdmin() ? (
+          <Route path="admin/users" element={
+            <PrivateRoute requiredRole="ADMIN">
               <Suspense fallback={<LoadingFallback />}>
-                <GerenciaUser />
+                <UserManagement />
               </Suspense>
-            ) : <Navigate to="/dashboard" replace />
+            </PrivateRoute>
           } />
         </Route>
         
