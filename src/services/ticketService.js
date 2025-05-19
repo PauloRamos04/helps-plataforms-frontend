@@ -134,6 +134,21 @@ export const ticketService = {
     }
   },
   
+  sendMessageWithImage: async (ticketId, formData) => {
+    try {
+      // URL CORRIGIDA: Deve ser /mensagens/with-image, não /tickets/with-image
+      const response = await api.post(`/tickets/${ticketId}/mensagens/with-image`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao enviar mensagem com imagem:', error);
+      throw new Error('Não foi possível enviar a mensagem com imagem');
+    }
+  },
+  
   // Obter URL da imagem
   getImageUrl: (imagePath) => {
     // Verificação para evitar erros se imagePath for undefined

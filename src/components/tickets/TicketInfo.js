@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import AuthContext from '../../context/AuthContext';
-import { ticketService } from '../../services/ticketService';  // Corrigido para importar { ticketService }
+import ticketService from '../../services/ticketService';  
 import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
 
 const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {

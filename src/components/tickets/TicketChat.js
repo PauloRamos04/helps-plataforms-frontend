@@ -8,7 +8,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
 import AuthContext from '../../context/AuthContext';
-import { ticketService } from '../../services/ticketService';
+import ticketService from '../../services/ticketService';
 
 const TicketChat = ({ ticketId, ticketStatus }) => {
   const { auth } = useContext(AuthContext);
@@ -116,6 +116,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   };
 
   const handleSendMessage = async () => {
+    // Verifica se há texto ou imagem para enviar
     if ((!messageInput.trim() && !selectedImage) || isSending) return;
     
     setIsSending(true);
@@ -126,7 +127,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     const optimisticId = `temp-${Date.now()}`;
     const optimisticMessage = {
       id: optimisticId,
-      isOwnMessage: true, // Força a mensagem como própria
+      isOwnMessage: true,
       senderId: currentUserId,
       sender: auth.user,
       remetente: auth.user,
@@ -144,17 +145,18 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       let response;
       
       if (selectedImage) {
-        const formData = new FormData();
-        formData.append('content', currentMessage);
-        formData.append('image', selectedImage);
+        console.log("Enviando mensagem com imagem");
         
-        if (typeof ticketService.sendMessageWithImage === 'function') {
-          response = await ticketService.sendMessageWithImage(ticketId, formData);
-        } else {
-          response = await ticketService.sendMessage(ticketId, {
-            content: currentMessage
-          });
-        }
+        const formData = new FormData();
+        
+        // Mesmo se estiver vazia, vamos enviar a string
+        formData.append('content', currentMessage);
+        console.log("Content adicionado ao FormData:", formData.get('content'));
+        
+        formData.append('image', selectedImage);
+        console.log("Imagem adicionada:", selectedImage.name);
+        
+        response = await ticketService.sendMessageWithImage(ticketId, formData);
       } else {
         response = await ticketService.sendMessage(ticketId, {
           content: currentMessage
@@ -162,15 +164,10 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       }
       
       // Processa a resposta
-      let responseMessage;
-      if (Array.isArray(response)) {
-        responseMessage = response;
-      } else {
-        responseMessage = [response];
-      }
+      const processedResponse = Array.isArray(response) ? response : [response];
       
       // Marca explicitamente a mensagem como própria
-      const processedResponse = responseMessage.map(msg => {
+      const processedMessages = processedResponse.map(msg => {
         // Adiciona o ID da mensagem ao meu registro
         if (msg.id) {
           myMessageIdsRef.current.add(msg.id.toString());
@@ -178,15 +175,16 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
         
         return {
           ...msg,
-          isOwnMessage: true, // Força a mensagem como própria
+          isOwnMessage: true,
           content: msg.content || msg.conteudo || currentMessage,
-          sentDate: msg.sentDate || msg.dataEnvio || new Date().toISOString()
+          sentDate: msg.sentDate || msg.dataEnvio || new Date().toISOString(),
+          imagePath: msg.imagePath || null
         };
       });
       
       // Atualiza as mensagens mantendo a marcação "própria"
       setMessages(prev => 
-        prev.filter(m => m.id !== optimisticId).concat(processedResponse)
+        prev.filter(m => m.id !== optimisticId).concat(processedMessages)
       );
       
       setSelectedImage(null);
@@ -196,7 +194,6 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       setTimeout(() => {
         fetchMessages(true);
       }, 500);
-      
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
@@ -446,13 +443,15 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                       }}
                     >
                       {/* Conteúdo da mensagem */}
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {content}
-                      </Typography>
+                      {content && (
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {content}
+                        </Typography>
+                      )}
                       
                       {/* Imagem anexada (se houver) */}
                       {message.imagePath && message.imagePath !== 'pending' && (
-                        <Box sx={{ mt: 1 }}>
+                        <Box sx={{ mt: content ? 1 : 0 }}>
                           <img
                             src={ticketService.getImageUrl(message.imagePath)}
                             alt="Anexo"
@@ -467,7 +466,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                       
                       {/* Indicador de carregamento para imagem */}
                       {message.imagePath === 'pending' && (
-                        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center' }}>
+                        <Box sx={{ mt: content ? 1 : 0, display: 'flex', justifyContent: 'center' }}>
                           <CircularProgress size={24} />
                         </Box>
                       )}
