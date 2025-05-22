@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { ticketService } from '../services/ticketService';
 import AuthContext from '../context/AuthContext';
 
@@ -13,6 +13,48 @@ export const useChat = (ticketId, ticketStatus) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   
+  // Extrair username do token JWT atual
+  const getCurrentUserIdentifier = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return {
+        username: payload.username || payload.sub,
+        userId: payload.sub,
+        name: payload.name
+      };
+    } catch {
+      return {
+        username: auth?.user?.username,
+        userId: auth?.user?.id,
+        name: auth?.user?.name
+      };
+    }
+  };
+  
+  const isMyMessage = (message) => {
+    const currentUser = getCurrentUserIdentifier();
+    if (!currentUser) return false;
+    
+    // Extrair informações do remetente da mensagem
+    const senderUsername = message.sender?.username || message.remetente?.username;
+    const senderId = message.sender?.id || message.remetente?.id || message.senderId;
+    
+    // Comparar por username (mais confiável)
+    if (senderUsername && currentUser.username) {
+      return senderUsername === currentUser.username;
+    }
+    
+    // Fallback: comparar por ID
+    if (senderId && currentUser.userId) {
+      return senderId.toString() === currentUser.userId.toString();
+    }
+    
+    return false;
+  };
+  
   useEffect(() => {
     if (ticketId) {
       refreshMessages();
@@ -24,21 +66,32 @@ export const useChat = (ticketId, ticketStatus) => {
     
     try {
       setLoading(true);
-      const data = await ticketService.getMensagens(ticketId);
+      const data = await ticketService.getTicketMessages(ticketId);
       
       if (Array.isArray(data)) {
-        setMessages(data.map(msg => ({
-          id: msg.id,
-          senderId: msg.remetente?.id,
-          senderName: msg.remetente?.name || msg.remetente?.username || 'Usuário',
-          content: msg.conteudo,
-          timestamp: msg.dataEnvio,
-          sender: msg.remetente,
-          imagePath: msg.imagePath
-        })));
+        const processedMessages = data.map(msg => {
+          const isOwn = isMyMessage(msg);
+          
+          return {
+            ...msg,
+            isOwnMessage: isOwn,
+            content: msg.content || msg.conteudo || '',
+            sentDate: msg.sentDate || msg.dataEnvio,
+            senderId: msg.senderId || msg.sender?.id || msg.remetente?.id,
+            senderName: msg.senderName || msg.sender?.name || msg.remetente?.name || msg.sender?.username || msg.remetente?.username || 'Usuário',
+            senderUsername: msg.sender?.username || msg.remetente?.username
+          };
+        });
+        
+        setMessages(processedMessages);
       }
-    } catch (error) {
-      setError('Não foi possível carregar as mensagens');
+      
+      if (error) {
+        setError(null);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar mensagens:", err);
+      setError('Não foi possível carregar as mensagens. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -52,35 +105,101 @@ export const useChat = (ticketId, ticketStatus) => {
     if ((!messageInput.trim() && !selectedImage) || isSending) return;
     
     setIsSending(true);
+    const currentMessage = messageInput;
+    setMessageInput('');
+    
+    const currentUser = getCurrentUserIdentifier();
+    
+    // Mensagem otimista com dados do usuário atual
+    const optimisticId = `temp-${Date.now()}`;
+    const optimisticMessage = {
+      id: optimisticId,
+      isOwnMessage: true,
+      senderId: currentUser?.userId,
+      senderName: currentUser?.name || currentUser?.username,
+      senderUsername: currentUser?.username,
+      sender: {
+        id: currentUser?.userId,
+        username: currentUser?.username,
+        name: currentUser?.name
+      },
+      remetente: {
+        id: currentUser?.userId,
+        username: currentUser?.username,
+        name: currentUser?.name
+      },
+      content: currentMessage,
+      conteudo: currentMessage,
+      sentDate: new Date().toISOString(),
+      dataEnvio: new Date().toISOString(),
+      _isOptimistic: true,
+      imagePath: selectedImage ? 'pending' : null
+    };
+    
+    setMessages(prev => [...prev, optimisticMessage]);
     
     try {
+      let response;
+      
       if (selectedImage) {
         const formData = new FormData();
-        formData.append('conteudo', messageInput);
+        formData.append('content', currentMessage);
         formData.append('image', selectedImage);
-        
-        await ticketService.enviarMensagemComImagem(ticketId, formData);
+        response = await ticketService.sendMessageWithImage(ticketId, formData);
       } else {
-        await ticketService.enviarMensagem(ticketId, { conteudo: messageInput });
+        response = await ticketService.sendMessage(ticketId, {
+          content: currentMessage
+        });
       }
       
-      setMessageInput('');
+      // Processar resposta garantindo que seja marcada como própria
+      const processedResponse = {
+        ...response,
+        isOwnMessage: true,
+        content: response.content || response.conteudo || currentMessage,
+        sentDate: response.sentDate || response.dataEnvio || new Date().toISOString(),
+        senderId: currentUser?.userId,
+        senderName: currentUser?.name || currentUser?.username,
+        senderUsername: currentUser?.username,
+        sender: {
+          ...response.sender,
+          username: currentUser?.username,
+          name: currentUser?.name
+        },
+        remetente: {
+          ...response.remetente,
+          username: currentUser?.username,
+          name: currentUser?.name
+        }
+      };
+      
+      // Remover mensagem otimista e adicionar a real
+      setMessages(prev => 
+        prev.filter(m => m.id !== optimisticId).concat([processedResponse])
+      );
+      
       setSelectedImage(null);
       setImagePreview(null);
       
-      // Refresh messages to show the new one
-      refreshMessages();
+      // Recarregar mensagens para garantir sincronização
+      setTimeout(() => {
+        refreshMessages();
+      }, 500);
     } catch (error) {
+      console.error("Erro ao enviar mensagem:", error);
+      setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
+      setMessageInput(currentMessage);
+      
       setNotification({
         open: true,
-        message: 'Erro ao enviar mensagem',
+        message: 'Não foi possível enviar a mensagem. Tente novamente.',
         type: 'error'
       });
     } finally {
       setIsSending(false);
     }
   };
-  
+
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;

@@ -23,12 +23,46 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const refreshIntervalRef = useRef(null);
-  const currentUserId = auth?.user?.id;
   
-  // Manter um registro de mensagens enviadas por mim
-  const myMessageIdsRef = useRef(new Set());
+  // Extrair username do token JWT atual
+  const getCurrentUserIdentifier = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return {
+        username: payload.username || payload.sub,
+        userId: payload.sub,
+        name: payload.name
+      };
+    } catch {
+      return {
+        username: auth?.user?.username,
+        userId: auth?.user?.id,
+        name: auth?.user?.name
+      };
+    }
+  };
+  
+  const isMyMessage = (message) => {
+    const currentUser = getCurrentUserIdentifier();
+    if (!currentUser) return false;
+    
+    const senderUsername = message.sender?.username || message.remetente?.username;
+    const senderId = message.sender?.id || message.remetente?.id || message.senderId;
+    
+    if (senderUsername && currentUser.username) {
+      return senderUsername === currentUser.username;
+    }
+    
+    if (senderId && currentUser.userId) {
+      return senderId.toString() === currentUser.userId.toString();
+    }
+    
+    return false;
+  };
 
-  // Efeito para configurar a atualização periódica
   useEffect(() => {
     if (!ticketId) return;
     
@@ -45,7 +79,6 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     };
   }, [ticketId]);
 
-  // Scroll para o final das mensagens
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -63,34 +96,20 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       const data = await ticketService.getTicketMessages(ticketId);
       
       if (data && Array.isArray(data)) {
-        // Processamos cada mensagem para decidir sua origem (própria ou não)
         const processedMessages = data.map(msg => {
-          // Extrai os IDs para comparação
-          const msgId = msg.id?.toString();
-          const senderId = msg.senderId || msg.sender?.id || msg.remetente?.id;
-          
-          // Uma mensagem é minha se:
-          // 1. O ID do remetente é o meu OU
-          // 2. O ID da mensagem está no meu registro de mensagens enviadas
-          const isOwnMessage = 
-            senderId === currentUserId || 
-            (msgId && myMessageIdsRef.current.has(msgId));
-            
-          // Se é minha mensagem, adiciona ao registro
-          if (isOwnMessage && msgId) {
-            myMessageIdsRef.current.add(msgId);
-          }
+          const isOwn = isMyMessage(msg);
           
           return {
             ...msg,
-            isOwnMessage: isOwnMessage, // Propriedade explícita
-            // Normaliza os campos para garantir compatibilidade
+            isOwnMessage: isOwn,
             content: msg.content || msg.conteudo || '',
-            sentDate: msg.sentDate || msg.dataEnvio
+            sentDate: msg.sentDate || msg.dataEnvio,
+            senderId: msg.senderId || msg.sender?.id || msg.remetente?.id,
+            senderName: msg.senderName || msg.sender?.name || msg.remetente?.name || msg.sender?.username || msg.remetente?.username || 'Usuário',
+            senderUsername: msg.sender?.username || msg.remetente?.username
           };
         });
         
-        // Verificar se há diferenças para evitar re-renders desnecessários
         const hasChanges = processedMessages.length !== messages.length ||
           JSON.stringify(processedMessages.map(m => m.id)) !== 
           JSON.stringify(messages.map(m => m.id));
@@ -116,21 +135,31 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   };
 
   const handleSendMessage = async () => {
-    // Verifica se há texto ou imagem para enviar
     if ((!messageInput.trim() && !selectedImage) || isSending) return;
     
     setIsSending(true);
     const currentMessage = messageInput;
     setMessageInput('');
     
-    // Mensagem otimista claramente marcada como própria
+    const currentUser = getCurrentUserIdentifier();
+    
     const optimisticId = `temp-${Date.now()}`;
     const optimisticMessage = {
       id: optimisticId,
       isOwnMessage: true,
-      senderId: currentUserId,
-      sender: auth.user,
-      remetente: auth.user,
+      senderId: currentUser?.userId,
+      senderName: currentUser?.name || currentUser?.username,
+      senderUsername: currentUser?.username,
+      sender: {
+        id: currentUser?.userId,
+        username: currentUser?.username,
+        name: currentUser?.name
+      },
+      remetente: {
+        id: currentUser?.userId,
+        username: currentUser?.username,
+        name: currentUser?.name
+      },
       content: currentMessage,
       conteudo: currentMessage,
       sentDate: new Date().toISOString(),
@@ -145,17 +174,9 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       let response;
       
       if (selectedImage) {
-        console.log("Enviando mensagem com imagem");
-        
         const formData = new FormData();
-        
-        // Mesmo se estiver vazia, vamos enviar a string
         formData.append('content', currentMessage);
-        console.log("Content adicionado ao FormData:", formData.get('content'));
-        
         formData.append('image', selectedImage);
-        console.log("Imagem adicionada:", selectedImage.name);
-        
         response = await ticketService.sendMessageWithImage(ticketId, formData);
       } else {
         response = await ticketService.sendMessage(ticketId, {
@@ -163,34 +184,33 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
         });
       }
       
-      // Processa a resposta
-      const processedResponse = Array.isArray(response) ? response : [response];
-      
-      // Marca explicitamente a mensagem como própria
-      const processedMessages = processedResponse.map(msg => {
-        // Adiciona o ID da mensagem ao meu registro
-        if (msg.id) {
-          myMessageIdsRef.current.add(msg.id.toString());
+      const processedResponse = {
+        ...response,
+        isOwnMessage: true,
+        content: response.content || response.conteudo || currentMessage,
+        sentDate: response.sentDate || response.dataEnvio || new Date().toISOString(),
+        senderId: currentUser?.userId,
+        senderName: currentUser?.name || currentUser?.username,
+        senderUsername: currentUser?.username,
+        sender: {
+          ...response.sender,
+          username: currentUser?.username,
+          name: currentUser?.name
+        },
+        remetente: {
+          ...response.remetente,
+          username: currentUser?.username,
+          name: currentUser?.name
         }
-        
-        return {
-          ...msg,
-          isOwnMessage: true,
-          content: msg.content || msg.conteudo || currentMessage,
-          sentDate: msg.sentDate || msg.dataEnvio || new Date().toISOString(),
-          imagePath: msg.imagePath || null
-        };
-      });
+      };
       
-      // Atualiza as mensagens mantendo a marcação "própria"
       setMessages(prev => 
-        prev.filter(m => m.id !== optimisticId).concat(processedMessages)
+        prev.filter(m => m.id !== optimisticId).concat([processedResponse])
       );
       
       setSelectedImage(null);
       setImagePreview(null);
       
-      // Atualiza todas as mensagens após um pequeno delay
       setTimeout(() => {
         fetchMessages(true);
       }, 500);
@@ -347,11 +367,10 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
               const content = message.content || message.conteudo || '';
               const sentDate = message.sentDate || message.dataEnvio;
               
-              // Use diretamente a propriedade isOwnMessage
-              const isCurrentUser = message.isOwnMessage;
+              const isCurrentUser = message.isOwnMessage === true;
               
-              // Nome para exibição
-              const displayName = message.remetente?.name || 
+              const displayName = message.senderName || 
+                                  message.remetente?.name || 
                                   message.sender?.name || 
                                   message.remetente?.username || 
                                   message.sender?.username || 
@@ -363,13 +382,11 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                   sx={{
                     display: 'flex',
                     flexDirection: 'column',
-                    // Alinhamento baseado em quem enviou a mensagem
                     alignItems: isCurrentUser ? 'flex-end' : 'flex-start',
                     mb: 1.5,
                     width: '100%'
                   }}
                 >
-                  {/* Nome do remetente */}
                   <Typography 
                     variant="caption" 
                     sx={{ 
@@ -400,17 +417,14 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                     )}
                   </Typography>
                   
-                  {/* Container da Mensagem */}
                   <Box
                     sx={{
                       display: 'flex',
-                      // Direção baseada em quem enviou
                       flexDirection: isCurrentUser ? 'row-reverse' : 'row',
                       alignItems: 'flex-start',
                       maxWidth: '80%'
                     }}
                   >
-                    {/* Avatar - só mostra para mensagens de outros */}
                     {!isCurrentUser && (
                       <Avatar
                         sx={{
@@ -427,11 +441,9 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                       </Avatar>
                     )}
                     
-                    {/* Balão da Mensagem */}
                     <Box
                       sx={{
                         p: 1.5,
-                        // Cores diferentes para usuário atual vs outros
                         bgcolor: isCurrentUser ? '#e3f2fd' : '#f5f5f5',
                         color: isCurrentUser ? '#0d47a1' : '#424242',
                         borderRadius: '12px',
@@ -442,14 +454,12 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                         boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                       }}
                     >
-                      {/* Conteúdo da mensagem */}
                       {content && (
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                           {content}
                         </Typography>
                       )}
                       
-                      {/* Imagem anexada (se houver) */}
                       {message.imagePath && message.imagePath !== 'pending' && (
                         <Box sx={{ mt: content ? 1 : 0 }}>
                           <img
@@ -464,14 +474,12 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                         </Box>
                       )}
                       
-                      {/* Indicador de carregamento para imagem */}
                       {message.imagePath === 'pending' && (
                         <Box sx={{ mt: content ? 1 : 0, display: 'flex', justifyContent: 'center' }}>
                           <CircularProgress size={24} />
                         </Box>
                       )}
                       
-                      {/* Horário da mensagem */}
                       <Typography 
                         variant="caption" 
                         sx={{ 
