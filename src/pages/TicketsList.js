@@ -8,7 +8,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useTickets } from '../hooks/useTickets';
 import StatusBadge from '../components/tickets/StatusBadge';
@@ -25,35 +24,29 @@ function TicketsList() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // Use refs para debounce e evitar atualizações desnecessárias
   const isInitialMount = useRef(true);
   const filterTimer = useRef(null);
   
-  // Available categories
   const categories = ['SUPORTE', 'FINANCEIRO', 'TÉCNICO'];
   
   useEffect(() => {
-    // Pule a primeira renderização
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
     }
     
-    // Limpe o timer anterior se houver
     if (filterTimer.current) {
       clearTimeout(filterTimer.current);
     }
     
-    // Debounce para evitar muitas chamadas
     filterTimer.current = setTimeout(() => {
       updateFilters({
         search: searchQuery,
         status: statusFilter,
         category: categoryFilter
       });
-    }, 300); // 300ms debounce
+    }, 300);
     
-    // Limpeza
     return () => {
       if (filterTimer.current) {
         clearTimeout(filterTimer.current);
@@ -85,6 +78,13 @@ function TicketsList() {
   
   const handleRowClick = (id) => {
     navigate(`/tickets/${id}`);
+  };
+
+  const getUserDisplayName = (ticket) => {
+    const user = ticket.user || ticket.usuario || ticket.solicitante;
+    if (!user) return 'Usuário não identificado';
+    
+    return user.name || user.nome || user.username || 'Usuário';
   };
   
   return (
@@ -141,7 +141,6 @@ function TicketsList() {
           </Box>
         </Box>
         
-        {/* Advanced filters */}
         {showFilters && (
           <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: '4px' }}>
             <Grid container spacing={2} alignItems="center">
@@ -225,9 +224,9 @@ function TicketsList() {
                   <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>ID</TableCell>
                   <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>CATEGORIA</TableCell>
                   <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>TÍTULO</TableCell>
+                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>SOLICITANTE</TableCell>
                   <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>DATA</TableCell>
                   <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>STATUS</TableCell>
-                  <TableCell sx={{ fontWeight: 'medium', color: '#666', fontSize: '14px' }}>AÇÕES</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -237,18 +236,66 @@ function TicketsList() {
                       key={ticket.id}
                       sx={{ 
                         '&:hover': { 
-                          bgcolor: 'rgba(0, 0, 0, 0.04)'
-                        },
-                        cursor: 'pointer'
+                          bgcolor: 'rgba(0, 0, 0, 0.04)',
+                          cursor: 'pointer'
+                        }
                       }}
                       onClick={() => handleRowClick(ticket.id)}
                     >
-                      <TableCell sx={{ fontSize: '14px' }}>{`#${ticket.id}`}</TableCell>
-                      <TableCell sx={{ fontSize: '14px' }}>
-                        {ticket.category || ticket.categoria || '-'}
+                      <TableCell sx={{ fontSize: '14px', fontWeight: 'medium' }}>
+                        #{ticket.id}
                       </TableCell>
                       <TableCell sx={{ fontSize: '14px' }}>
-                        {ticket.title || ticket.titulo}
+                        <Box
+                          sx={{
+                            px: 1,
+                            py: 0.5,
+                            bgcolor: '#f0f0f0',
+                            borderRadius: '4px',
+                            display: 'inline-block',
+                            fontSize: '12px',
+                            fontWeight: 'medium',
+                            color: '#666'
+                          }}
+                        >
+                          {ticket.category || ticket.categoria || '-'}
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '14px', maxWidth: '300px' }}>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {ticket.title || ticket.titulo}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '14px' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Box
+                            sx={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: '50%',
+                              bgcolor: '#4966f2',
+                              color: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              mr: 1
+                            }}
+                          >
+                            {getUserDisplayName(ticket).charAt(0).toUpperCase()}
+                          </Box>
+                          <Typography variant="body2">
+                            {getUserDisplayName(ticket)}
+                          </Typography>
+                        </Box>
                       </TableCell>
                       <TableCell sx={{ fontSize: '14px' }}>
                         {formatDate(
@@ -259,20 +306,6 @@ function TicketsList() {
                       </TableCell>
                       <TableCell sx={{ fontSize: '14px' }}>
                         <StatusBadge status={ticket.status || 'ABERTO'} />
-                      </TableCell>
-                      <TableCell>
-                        <Tooltip title="Ver detalhes">
-                          <IconButton 
-                            size="small" 
-                            sx={{ color: '#4966f2' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRowClick(ticket.id);
-                            }}
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))
