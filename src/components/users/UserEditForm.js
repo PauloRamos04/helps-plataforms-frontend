@@ -44,10 +44,10 @@ const UserEditForm = ({ open, onClose, user, onSuccess }) => {
             label="Nome de Usuário"
             name="username"
             value={formData.username}
+            onChange={handleChange}
             margin="normal"
             required
             inputProps={{ maxLength: 50 }}
-            disabled={true} // Username cannot be changed
           />
 
           <TextField
@@ -59,8 +59,7 @@ const UserEditForm = ({ open, onClose, user, onSuccess }) => {
             margin="normal"
             inputProps={{ maxLength: 100 }}
           />
-
-          {!initialData && (
+  
             <TextField
               fullWidth
               label="Senha"
@@ -75,7 +74,6 @@ const UserEditForm = ({ open, onClose, user, onSuccess }) => {
               error={!!errors.password}
               helperText={errors.password || "A senha deve ter pelo menos 6 caracteres"}
             />
-          )}
 
           <FormControl fullWidth margin="normal">
             <InputLabel id="role-edit-label">Perfil</InputLabel>
