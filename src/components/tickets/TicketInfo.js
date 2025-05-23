@@ -17,7 +17,17 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
   const handleAderir = async () => {
     try {
       setActionInProgress(true);
-      await ticketService.assignTicket(ticket.id);
+      // Tentar primeiro o novo endpoint, depois o legado se falhar
+      try {
+        await ticketService.assignTicket(ticket.id);
+      } catch (error) {
+        if (error.response && error.response.status === 404) {
+          // Fallback para endpoint legado
+          await ticketService.assignTicketLegacy(ticket.id);
+        } else {
+          throw error;
+        }
+      }
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error assigning ticket:', error);
@@ -29,7 +39,17 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
   const handleFinalizar = async () => {
     try {
       setActionInProgress(true);
-      await ticketService.closeTicket(ticket.id);
+      // Tentar primeiro o novo endpoint, depois o legado se falhar
+      try {
+        await ticketService.closeTicket(ticket.id);
+      } catch (error) {
+        if (error.response && error.response.status === 404) {
+          // Fallback para endpoint legado
+          await ticketService.closeTicketLegacy(ticket.id);
+        } else {
+          throw error;
+        }
+      }
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error closing ticket:', error);
@@ -99,7 +119,6 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
         borderRadius: '8px',
       }}
     >
-      {/* Card de descrição */}
       <Box>
         <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
           Descrição do Chamado
@@ -169,7 +188,6 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
 
       <Divider />
 
-      {/* Informações do chamado */}
       <Box>
         <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
           Informações do Chamado
@@ -215,7 +233,6 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
           )}
         </Box>
 
-        {/* Condiciona a exibição das ações */}
         {!hideActions && (
           <>
             <Divider sx={{ my: 2 }} />

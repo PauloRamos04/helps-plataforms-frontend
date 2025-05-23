@@ -86,6 +86,30 @@ function TicketsList() {
     
     return user.name || user.nome || user.username || 'Usuário';
   };
+
+  // Função para compatibilidade com diferentes estruturas de resposta
+  const getCompatibleTickets = () => {
+    if (!filteredTickets) return [];
+    
+    // Se filteredTickets é um array, use diretamente
+    if (Array.isArray(filteredTickets)) {
+      return filteredTickets;
+    }
+    
+    // Se é um objeto com propriedade data (ApiResponse)
+    if (filteredTickets.data && Array.isArray(filteredTickets.data)) {
+      return filteredTickets.data;
+    }
+    
+    // Se é um objeto com propriedade success (ApiResponse)
+    if (filteredTickets.success && filteredTickets.data && Array.isArray(filteredTickets.data)) {
+      return filteredTickets.data;
+    }
+    
+    return [];
+  };
+
+  const tickets = getCompatibleTickets();
   
   return (
     <Box sx={{ p: 3 }}>
@@ -230,8 +254,8 @@ function TicketsList() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredTickets.length > 0 ? (
-                  filteredTickets.map((ticket) => (
+                {tickets.length > 0 ? (
+                  tickets.map((ticket) => (
                     <TableRow 
                       key={ticket.id}
                       sx={{ 

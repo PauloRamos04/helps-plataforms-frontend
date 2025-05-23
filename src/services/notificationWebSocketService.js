@@ -13,6 +13,7 @@ class NotificationWebSocketService {
     this.debug = false;
     this.baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8080';
     this.connectionState = 'DISCONNECTED';
+    this.heartbeatInterval = null;
   }
 
   connect(onConnected, onError) {
@@ -48,71 +49,101 @@ class NotificationWebSocketService {
       
       const socket = new SockJS(socketUrl, null, {
         transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
-        timeout: 5000
+        timeout: 10000
       });
       
-      // Configurar cliente STOMP
       this.stompClient = webstomp.over(socket, {
         debug: this.debug,
-        heartbeat: { outgoing: 20000, incoming: 20000 },
-        reconnect_delay: 5000
+        heartbeat: { outgoing: 30000, incoming: 30000 }
       });
       
-      // Configurar cabeçalhos para conexão
+      // Desabilitar logs automáticos do stomp se debug estiver desabilitado
+      if (!this.debug) {
+        this.stompClient.debug = () => {};
+      }
+      
       const connectHeaders = { 
         'Authorization': `Bearer ${token}`,
         'accept-version': '1.1,1.0',
-        'heart-beat': '10000,10000'
+        'heart-beat': '30000,30000'
       };
       
-      // Conectar ao servidor WebSocket
       this.stompClient.connect(
         connectHeaders,
         (frame) => {
-          this.log('WebSocket conectado:', frame);
+          this.log('WebSocket conectado com sucesso:', frame.headers);
           this.isConnected = true;
           this.connectionState = 'CONNECTED';
           this.reconnectAttempts = 0;
           
+          // Iniciar heartbeat personalizado
+          this._startHeartbeat();
+          
           if (onConnected) onConnected(frame);
           
-          // Resubscrever em todos os canais anteriores
           this._resubscribeAll();
         },
         (error) => {
           this.error('Erro na conexão WebSocket:', error);
           this.isConnected = false;
           this.connectionState = 'DISCONNECTED';
+          this._stopHeartbeat();
           
           if (onError) onError(error);
           
-          // Agendar reconexão
           this._scheduleReconnection(onConnected, onError);
         }
       );
       
-      // Tratar fechamento do socket
       socket.onclose = (event) => {
-        this.warn('WebSocket fechado:', event);
+        this.warn('WebSocket fechado:', event.code, event.reason);
         this.isConnected = false;
+        this._stopHeartbeat();
         
         if (this.connectionState === 'CONNECTED') {
           this.connectionState = 'DISCONNECTED';
           
-          // Não reconectar em caso de fechamento normal (código 1000)
           if (event.code !== 1000) {
             this._scheduleReconnection(onConnected, onError);
           }
         }
       };
+
+      socket.onerror = (error) => {
+        this.error('Erro no socket:', error);
+        this.isConnected = false;
+        this.connectionState = 'DISCONNECTED';
+        this._stopHeartbeat();
+      };
+      
     } catch (error) {
       this.error('Erro crítico na conexão WebSocket:', error);
       this.connectionState = 'DISCONNECTED';
       if (onError) onError(error);
     }
   }
+
+  _startHeartbeat() {
+    this._stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isConnected && this.stompClient) {
+        try {
+          // Enviar ping para manter conexão ativa
+          this.stompClient.send('/app/ping', '{}');
+        } catch (error) {
+          this.warn('Erro no heartbeat:', error);
+        }
+      }
+    }, 25000); // A cada 25 segundos
+  }
+
+  _stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
   
-  // Método de reconexão com backoff exponencial
   _scheduleReconnection(onConnected, onError) {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.error('Máximo de tentativas de reconexão atingido');
@@ -121,7 +152,6 @@ class NotificationWebSocketService {
     
     this.connectionState = 'RECONNECTING';
     
-    // Calcular tempo de espera com backoff exponencial
     const delay = Math.min(30000, 1000 * Math.pow(2, this.reconnectAttempts));
     
     this.log(`Tentando reconectar em ${delay}ms (Tentativa ${this.reconnectAttempts + 1})`);
@@ -132,14 +162,10 @@ class NotificationWebSocketService {
     }, delay);
   }
   
-  // Resubscrever em todos os canais após reconexão
   _resubscribeAll() {
     const subscriptionsToRestore = [...this.subscriptions.entries()];
-    
-    // Limpar as assinaturas existentes, pois a conexão foi refeita
     this.subscriptions.clear();
     
-    // Restaurar cada assinatura
     subscriptionsToRestore.forEach(([destination, metadata]) => {
       try {
         const { callback, headers } = metadata;
@@ -151,8 +177,9 @@ class NotificationWebSocketService {
   }
 
   disconnect() {
+    this._stopHeartbeat();
+    
     if (this.stompClient && this.isConnected) {
-      // Cancelar todas as assinaturas
       this.subscriptions.forEach((metadata, destination) => {
         this.unsubscribe(destination);
       });
@@ -175,7 +202,6 @@ class NotificationWebSocketService {
     }
   }
   
-  // Método genérico para se inscrever em um destino
   subscribe(destination, callback, headers = {}) {
     if (!this.isConnected || !this.stompClient) {
       this.warn(`Não foi possível assinar ${destination}: WebSocket não conectado`);
@@ -215,7 +241,6 @@ class NotificationWebSocketService {
     }
   }
   
-  // Cancelar assinatura
   unsubscribe(destination) {
     const metadata = this.subscriptions.get(destination);
     if (metadata && metadata.subscription) {
@@ -232,7 +257,6 @@ class NotificationWebSocketService {
     return false;
   }
   
-  // Adicionar callback para receber notificações
   addNotificationCallback(callback) {
     if (typeof callback === 'function' && !this.notificationCallbacks.includes(callback)) {
       this.notificationCallbacks.push(callback);
@@ -241,12 +265,10 @@ class NotificationWebSocketService {
     return false;
   }
   
-  // Remover callback
   removeNotificationCallback(callback) {
     this.notificationCallbacks = this.notificationCallbacks.filter(cb => cb !== callback);
   }
   
-  // Enviar notificação para todos os callbacks registrados
   _notifyCallbacks(notification) {
     this.notificationCallbacks.forEach(callback => {
       try {
@@ -257,7 +279,6 @@ class NotificationWebSocketService {
     });
   }
   
-  // Assinar tópico de notificações pessoais
   subscribeToUserNotifications(userId, username) {
     if (!this.isConnected || !this.stompClient) {
       this.warn('Não foi possível assinar notificações: WebSocket não conectado');
@@ -269,14 +290,12 @@ class NotificationWebSocketService {
       return false;
     }
     
-    // Assinar pelo username
     const userDestination = `/user/${username}/queue/notifications`;
     const userSubscribed = this.subscribe(userDestination, (notification) => {
       this.log('Notificação pessoal recebida:', notification);
       this._notifyCallbacks(notification);
     });
     
-    // Assinar pelo ID (como fallback)
     const idDestination = `/user/${userId}/queue/notifications`;
     if (idDestination !== userDestination) {
       const idSubscribed = this.subscribe(idDestination, (notification) => {
@@ -290,7 +309,6 @@ class NotificationWebSocketService {
     return userSubscribed;
   }
   
-  // Assinar tópico de notificações globais
   subscribeToGlobalNotifications() {
     const destination = '/topic/notifications';
     return this.subscribe(destination, (notification) => {
@@ -299,7 +317,6 @@ class NotificationWebSocketService {
     });
   }
   
-  // Assinar canal de um chamado específico
   subscribeToChamado(chamadoId, onMessageReceived) {
     if (!chamadoId) {
       this.warn('ID do chamado não fornecido para assinatura');
@@ -310,7 +327,6 @@ class NotificationWebSocketService {
     return this.subscribe(destination, onMessageReceived);
   }
   
-  // Cancelar assinatura de um chamado
   unsubscribeFromChamado(chamadoId) {
     if (!chamadoId) return false;
     
@@ -318,7 +334,6 @@ class NotificationWebSocketService {
     return this.unsubscribe(destination);
   }
   
-  // Adicionar usuário a um chat de chamado
   addUser(chamadoId, userInfo) {
     if (!this.isConnected || !this.stompClient || !chamadoId) {
       return false;
@@ -333,7 +348,6 @@ class NotificationWebSocketService {
     }
   }
   
-  // Enviar mensagem para um chamado
   sendMessage(chamadoId, message) {
     if (!this.isConnected || !this.stompClient || !chamadoId) {
       return false;
@@ -347,8 +361,16 @@ class NotificationWebSocketService {
       return false;
     }
   }
+
+  // Método para verificar se está conectado
+  getConnectionState() {
+    return {
+      isConnected: this.isConnected,
+      state: this.connectionState,
+      subscriptions: this.subscriptions.size
+    };
+  }
   
-  // Funções de log
   log(...args) {
     if (this.debug) {
       console.log('[WebSocket]', ...args);
@@ -364,7 +386,6 @@ class NotificationWebSocketService {
   }
 }
 
-// Criar instância singleton
 const notificationWebSocketService = new NotificationWebSocketService();
 
 export default notificationWebSocketService;

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   Badge, IconButton, Menu, MenuItem, Typography, Box, 
   Divider, List, ListItem, ListItemText, CircularProgress,
-  Button, Tooltip
+  Button, Tooltip, Chip
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -10,8 +10,9 @@ import InfoIcon from '@mui/icons-material/Info';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import MessageIcon from '@mui/icons-material/Message';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import { useNavigate } from 'react-router-dom';
-import { useNotifications } from '../../hooks/useNotifications';
+import NotificationsContext from '../../context/NotificationsContext';
 
 const NotificationsMenu = () => {
   const navigate = useNavigate();
@@ -24,8 +25,9 @@ const NotificationsMenu = () => {
     wsConnected,
     markAsRead, 
     markAllAsRead, 
-    refreshNotifications
-  } = useNotifications();
+    refreshNotifications,
+    addDummyNotification
+  } = useContext(NotificationsContext);
   
   const handleOpenMenu = (event) => {
     setAnchorEl(event.currentTarget);
@@ -36,15 +38,17 @@ const NotificationsMenu = () => {
   };
   
   const handleNotificationClick = (notification) => {
-    if (notification.id) {
+    if (notification.id && !notification.read) {
       markAsRead(notification.id);
     }
     
     handleCloseMenu();
     
-    if (notification.chamadoId) {
+    // Navegar para o ticket se houver ticketId
+    if (notification.ticketId || notification.chamadoId) {
+      const ticketId = notification.ticketId || notification.chamadoId;
       setTimeout(() => {
-        navigate(`/tickets/${notification.chamadoId}`);
+        navigate(`/tickets/${ticketId}`);
       }, 300);
     }
   };
@@ -65,16 +69,28 @@ const NotificationsMenu = () => {
   const getNotificationIcon = (type) => {
     switch (type) {
       case 'NOVO_CHAMADO':
+      case 'NEW_TICKET':
         return <InfoIcon fontSize="small" color="primary" />;
       case 'CHAMADO_EM_ATENDIMENTO':
+      case 'TICKET_EM_ATENDIMENTO':
         return <WarningIcon fontSize="small" color="warning" />;
       case 'CHAMADO_FECHADO':
+      case 'TICKET_FECHADO':
         return <CheckCircleIcon fontSize="small" color="success" />;
       case 'NOVA_MENSAGEM':
+      case 'NEW_MESSAGE':
         return <MessageIcon fontSize="small" color="info" />;
+      case 'TEST':
+        return <FiberManualRecordIcon fontSize="small" color="secondary" />;
       default:
         return <InfoIcon fontSize="small" color="action" />;
     }
+  };
+
+  // Função para adicionar notificação de teste
+  const handleAddTestNotification = (e) => {
+    e.stopPropagation();
+    addDummyNotification();
   };
   
   return (
@@ -97,9 +113,9 @@ const NotificationsMenu = () => {
         onClose={handleCloseMenu}
         PaperProps={{
           sx: {
-            width: 320,
+            width: 360,
             maxWidth: '100%',
-            maxHeight: 450,
+            maxHeight: 500,
             overflowY: 'auto'
           }
         }}
@@ -109,30 +125,26 @@ const NotificationsMenu = () => {
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle1" fontWeight="medium">
             Notificações
-            {wsConnected && (
-              <Box 
-                component="span" 
-                sx={{ 
-                  ml: 1, 
-                  px: 1, 
-                  py: 0.25, 
-                  bgcolor: '#e8f5e9', 
-                  color: '#2e7d32',
-                  borderRadius: '4px',
-                  fontSize: '0.7rem'
-                }}
-              >
-                Online
-              </Box>
-            )}
           </Typography>
           
-          <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Indicador de conexão */}
+            <Chip 
+              label={wsConnected ? 'Online' : 'Offline'} 
+              size="small"
+              sx={{ 
+                bgcolor: wsConnected ? '#e8f5e9' : '#ffebee', 
+                color: wsConnected ? '#2e7d32' : '#c62828',
+                fontSize: '0.7rem',
+                height: '20px'
+              }}
+            />
+            
             {unreadCount > 0 && (
               <Button 
                 size="small"
                 variant="text"
-                sx={{ color: '#4966f2', textTransform: 'none', mr: 1 }}
+                sx={{ color: '#4966f2', textTransform: 'none', minWidth: 'auto', p: 0.5 }}
                 onClick={markAllAsRead}
               >
                 Limpar
@@ -148,6 +160,19 @@ const NotificationsMenu = () => {
                 <RefreshIcon fontSize="small" />
               </IconButton>
             </Tooltip>
+
+            {/* Botão de teste - apenas em desenvolvimento */}
+            {process.env.NODE_ENV === 'development' && (
+              <Tooltip title="Adicionar notificação de teste">
+                <IconButton 
+                  size="small" 
+                  onClick={handleAddTestNotification}
+                  sx={{ color: '#ff9800' }}
+                >
+                  <InfoIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
           </Box>
         </Box>
         
@@ -159,14 +184,17 @@ const NotificationsMenu = () => {
           </Box>
         ) : notifications.length > 0 ? (
           <List disablePadding>
-            {notifications.map((notification) => (
+            {notifications.slice(0, 10).map((notification) => (
               <React.Fragment key={notification.id || Math.random()}>
                 <ListItem 
                   button 
                   onClick={() => handleNotificationClick(notification)}
                   sx={{ 
-                    bgcolor: notification.read ? 'transparent' : 'rgba(73, 102, 242, 0.1)',
-                    py: 1.5
+                    bgcolor: notification.read ? 'transparent' : 'rgba(73, 102, 242, 0.08)',
+                    py: 1.5,
+                    '&:hover': {
+                      bgcolor: notification.read ? 'rgba(0, 0, 0, 0.04)' : 'rgba(73, 102, 242, 0.12)'
+                    }
                   }}
                 >
                   <Box sx={{ mr: 1.5, display: 'flex', alignItems: 'center' }}>
@@ -174,14 +202,25 @@ const NotificationsMenu = () => {
                   </Box>
                   <ListItemText
                     primary={
-                      <Typography 
-                        variant="body2" 
-                        sx={{ 
-                          fontWeight: notification.read ? 'normal' : 'medium'
-                        }}
-                      >
-                        {notification.message}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            fontWeight: notification.read ? 'normal' : 'medium',
+                            flex: 1
+                          }}
+                        >
+                          {notification.message}
+                        </Typography>
+                        {!notification.read && (
+                          <FiberManualRecordIcon 
+                            sx={{ 
+                              fontSize: '8px', 
+                              color: '#4966f2' 
+                            }} 
+                          />
+                        )}
+                      </Box>
                     }
                     secondary={
                       <Typography variant="caption" color="textSecondary">
@@ -193,12 +232,32 @@ const NotificationsMenu = () => {
                 <Divider />
               </React.Fragment>
             ))}
+            
+            {notifications.length > 10 && (
+              <ListItem sx={{ justifyContent: 'center', py: 1 }}>
+                <Typography variant="caption" color="textSecondary">
+                  Mostrando 10 de {notifications.length} notificações
+                </Typography>
+              </ListItem>
+            )}
           </List>
         ) : (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body2" color="textSecondary">
               Nenhuma notificação no momento
             </Typography>
+            
+            {/* Botão de teste quando não há notificações */}
+            {process.env.NODE_ENV === 'development' && (
+              <Button 
+                size="small"
+                variant="outlined"
+                onClick={handleAddTestNotification}
+                sx={{ mt: 2, textTransform: 'none' }}
+              >
+                Adicionar Teste
+              </Button>
+            )}
           </Box>
         )}
       </Menu>

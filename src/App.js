@@ -4,13 +4,13 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import AppRoutes from './routes';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import './styles/App.css';
 
-// Tema personalizado para corresponder ao design das screenshots
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#4966f2', // Azul da interface das screenshots
+      main: '#4966f2',
     },
     secondary: {
       main: '#f50057',
@@ -47,14 +47,16 @@ const theme = createTheme({
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AuthProvider>
-        <NotificationsProvider>
-          <AppRoutes />
-        </NotificationsProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AuthProvider>
+          <NotificationsProvider>
+            <AppRoutes />
+          </NotificationsProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

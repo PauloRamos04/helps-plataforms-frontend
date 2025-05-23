@@ -5,14 +5,33 @@ export const ticketService = {
   getTickets: async () => {
     try {
       const response = await api.get('/tickets');
-      return response.data;
+      return response.data.success ? response.data.data : response.data;
     } catch (error) {
       console.error('Erro ao buscar chamados:', error);
       throw new Error('Não foi possível carregar os chamados');
     }
   },
   
-  // Para compatibilidade com código existente (alias)
+  // Obter chamados com paginação
+  getTicketsPaginated: async (page = 0, size = 20, sortBy = 'openingDate', sortDirection = 'desc', filters = {}) => {
+    try {
+      const params = {
+        page,
+        size,
+        sortBy,
+        sortDirection,
+        ...filters
+      };
+      
+      const response = await api.get('/tickets/paginated', { params });
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.error('Erro ao buscar chamados paginados:', error);
+      throw new Error('Não foi possível carregar os chamados');
+    }
+  },
+  
+  // Para compatibilidade com código existente
   getChamados: async () => {
     return ticketService.getTickets();
   },
@@ -21,19 +40,19 @@ export const ticketService = {
   getTicketById: async (id) => {
     try {
       const response = await api.get(`/tickets/${id}`);
-      return response.data;
+      return response.data.success ? response.data.data : response.data;
     } catch (error) {
       console.error('Erro ao buscar detalhes do chamado:', error);
       throw new Error('Não foi possível carregar os detalhes do chamado');
     }
   },
   
-  // Para compatibilidade com código existente (alias)
+  // Para compatibilidade
   getChamadoById: async (id) => {
     return ticketService.getTicketById(id);
   },
   
-  // Criar um novo chamado
+  // Criar um novo chamado (JSON)
   createTicket: async (ticketData) => {
     try {
       const response = await api.post('/tickets', ticketData);
@@ -44,7 +63,7 @@ export const ticketService = {
     }
   },
   
-  // Criar chamado com imagem
+  // Criar chamado com imagem (FormData) - endpoint antigo
   createTicketWithImage: async (formData) => {
     try {
       const response = await api.post('/tickets/with-image', formData, {
@@ -59,24 +78,72 @@ export const ticketService = {
     }
   },
   
-  // Para compatibilidade com código existente (alias)
+  // Novo endpoint para criar chamado com validação (FormData)
+  createTicketNew: async (formData) => {
+    try {
+      const response = await api.post('/tickets/new', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.error('Erro ao criar chamado:', error);
+      throw new Error('Não foi possível criar o chamado');
+    }
+  },
+  
+  // Criar chamado com validação JSON
+  createTicketValidated: async (ticketData) => {
+    try {
+      const response = await api.post('/tickets/validate', ticketData);
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.error('Erro ao criar chamado:', error);
+      throw new Error('Não foi possível criar o chamado');
+    }
+  },
+  
+  // Para compatibilidade
   criarChamado: async (ticketData) => {
     return ticketService.createTicket(ticketData);
   },
   
-  // Assumir um chamado
+  // Assumir um chamado - endpoint novo
   assignTicket: async (id) => {
     try {
-      const response = await api.post(`/tickets/${id}/aderir`);
-      return response.data;
+      const response = await api.post(`/tickets/${id}/assign`);
+      return response.data.success ? response.data.data : response.data;
     } catch (error) {
       console.error('Erro ao assumir chamado:', error);
       throw new Error('Não foi possível assumir o chamado');
     }
   },
   
-  // Fechar um chamado
+  // Assumir um chamado - endpoint legado
+  assignTicketLegacy: async (id) => {
+    try {
+      const response = await api.post(`/tickets/${id}/aderir`);
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.error('Erro ao assumir chamado:', error);
+      throw new Error('Não foi possível assumir o chamado');
+    }
+  },
+  
+  // Fechar um chamado - endpoint novo
   closeTicket: async (id) => {
+    try {
+      const response = await api.post(`/tickets/${id}/close`);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao finalizar chamado:', error);
+      throw new Error('Não foi possível finalizar o chamado');
+    }
+  },
+  
+  // Fechar um chamado - endpoint legado
+  closeTicketLegacy: async (id) => {
     try {
       const response = await api.post(`/tickets/${id}/fechar`);
       return response.data;
@@ -86,16 +153,25 @@ export const ticketService = {
     }
   },
   
-  // Atualizar status do chamado - para compatibilidade
+  // Atualizar ticket
+  updateTicket: async (id, ticketData) => {
+    try {
+      const response = await api.put(`/tickets/${id}`, ticketData);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao atualizar chamado:', error);
+      throw new Error('Não foi possível atualizar o chamado');
+    }
+  },
+  
+  // Atualizar status do chamado
   updateTicketStatus: async (id, status) => {
     try {
-      // Tratamento especial baseado no status
       if (status === 'EM_ATENDIMENTO') {
         return ticketService.assignTicket(id);
       } else if (status === 'FECHADO') {
         return ticketService.closeTicket(id);
       } else {
-        // Fallback para API genérica se necessário
         const response = await api.put(`/tickets/${id}`, { status });
         return response.data;
       }
@@ -105,7 +181,7 @@ export const ticketService = {
     }
   },
   
-  // Obter mensagens de um chamado - CORRIGIDO para usar o endpoint correto
+  // Obter mensagens de um chamado
   getTicketMessages: async (ticketId) => {
     try {
       const response = await api.get(`/tickets/${ticketId}/mensagens`);
@@ -116,15 +192,19 @@ export const ticketService = {
     }
   },
   
-  // Enviar mensagem em um chamado - CORRIGIDO para usar o endpoint correto
+  // Para compatibilidade
+  getMensagens: async (ticketId) => {
+    return ticketService.getTicketMessages(ticketId);
+  },
+  
+  // Enviar mensagem em um chamado
   sendMessage: async (ticketId, messageData) => {
     try {
-      // Verifica se messageData.content existe, caso contrário tenta usar messageData diretamente
       const payload = typeof messageData === 'string' 
         ? { content: messageData } 
         : messageData.content 
           ? messageData 
-          : { content: messageData.message || messageData.texto || messageData };
+          : { content: messageData.message || messageData.texto || messageData.conteudo || messageData };
           
       const response = await api.post(`/tickets/${ticketId}/mensagens`, payload);
       return response.data;
@@ -134,9 +214,14 @@ export const ticketService = {
     }
   },
   
+  // Para compatibilidade
+  enviarMensagem: async (ticketId, messageData) => {
+    return ticketService.sendMessage(ticketId, messageData);
+  },
+  
+  // Enviar mensagem com imagem
   sendMessageWithImage: async (ticketId, formData) => {
     try {
-      // URL CORRIGIDA: Deve ser /mensagens/with-image, não /tickets/with-image
       const response = await api.post(`/tickets/${ticketId}/mensagens/with-image`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -149,18 +234,21 @@ export const ticketService = {
     }
   },
   
+  // Para compatibilidade
+  enviarMensagemComImagem: async (ticketId, formData) => {
+    return ticketService.sendMessageWithImage(ticketId, formData);
+  },
+  
   // Obter URL da imagem
   getImageUrl: (imagePath) => {
-    // Verificação para evitar erros se imagePath for undefined
     if (!imagePath) return null;
     
-    // Se o caminho já for uma URL completa
     if (imagePath.startsWith('http')) {
       return imagePath;
     }
     
-    // Caso contrário, construa a URL
-    return `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+    const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+    return `${baseUrl}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
   }
 };
 

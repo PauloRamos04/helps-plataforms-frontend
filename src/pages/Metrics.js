@@ -18,7 +18,7 @@ import ErrorHandler from '../components/common/ErrorHandler';
 
 function Metrics() {
   const { auth } = useContext(AuthContext);
-  const [tickets, setTickets] = useState([]);
+  const [tickets, setTickets] = useState([]); // Inicializar como array vazio
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [period, setPeriod] = useState('month');
@@ -49,18 +49,31 @@ function Metrics() {
     try {
       setLoading(true);
       setError(null);
+      
       const data = await ticketService.getTickets();
-      setTickets(data);
-      calculateMetrics(data);
+      
+      // Garantir que seja sempre um array
+      const ticketsArray = Array.isArray(data) ? data : [];
+      console.log('Tickets carregados para métricas:', ticketsArray);
+      
+      setTickets(ticketsArray);
+      calculateMetrics(ticketsArray);
     } catch (error) {
       console.error('Error loading metrics:', error);
       setError('Não foi possível carregar as métricas. Tente novamente.');
+      setTickets([]); // Garantir que seja um array em caso de erro
     } finally {
       setLoading(false);
     }
   };
 
   const filterByPeriod = (tickets) => {
+    // Garantir que tickets seja um array
+    if (!Array.isArray(tickets)) {
+      console.warn('filterByPeriod: tickets não é um array:', tickets);
+      return [];
+    }
+
     const now = new Date();
     const cutoffDate = new Date();
 
@@ -88,6 +101,26 @@ function Metrics() {
   };
 
   const calculateMetrics = (allTickets) => {
+    // Garantir que allTickets seja um array
+    if (!Array.isArray(allTickets)) {
+      console.warn('calculateMetrics: allTickets não é um array:', allTickets);
+      setMetrics({
+        total: 0,
+        byStatus: {},
+        byCategory: {},
+        averageResolutionTime: 0,
+        totalResolved: 0,
+        resolutionRate: 0,
+        myTickets: 0,
+        myResolved: 0,
+        myCreated: 0,
+        myInProgress: 0,
+        myAverageTime: 0,
+        teamMetrics: {}
+      });
+      return;
+    }
+
     const filteredTickets = filterByPeriod(allTickets);
     
     const byStatus = filteredTickets.reduce((acc, ticket) => {
@@ -128,6 +161,7 @@ function Metrics() {
       myCreated = myTickets.length;
       myResolved = myTickets.filter(t => t.status === 'FECHADO').length;
       myInProgress = myTickets.filter(t => t.status === 'EM_ATENDIMENTO').length;
+      myAverageTime = 0;
     } else if (isHelper) {
       // Para helpers: tickets que eles estão atendendo
       myTickets = filteredTickets.filter(t => t.helper?.id === auth.user?.id);
@@ -163,7 +197,7 @@ function Metrics() {
       averageResolutionTime,
       totalResolved: resolvedTickets.length,
       resolutionRate: filteredTickets.length > 0 ? (resolvedTickets.length / filteredTickets.length) * 100 : 0,
-      myTickets: myTickets.length,
+      myTickets: Array.isArray(myTickets) ? myTickets.length : 0,
       myResolved,
       myCreated,
       myInProgress,
@@ -227,8 +261,8 @@ function Metrics() {
     </Card>
   );
 
-  // Top performers para admins e helpers
-  const topPerformers = tickets
+  // Top performers para admins e helpers - com verificação de array
+  const topPerformers = Array.isArray(tickets) ? tickets
     .filter(t => t.helper && t.status === 'FECHADO')
     .reduce((acc, ticket) => {
       const helperId = ticket.helper.id;
@@ -238,7 +272,7 @@ function Metrics() {
       }
       acc[helperId].count++;
       return acc;
-    }, {});
+    }, {}) : {};
 
   const sortedPerformers = Object.values(topPerformers)
     .sort((a, b) => b.count - a.count)
@@ -314,20 +348,26 @@ function Metrics() {
                 Seus Chamados por Categoria
               </Typography>
               <Box sx={{ mt: 2 }}>
-                {Object.entries(metrics.byCategory).map(([category, count]) => (
-                  <Box key={category} sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                      <Chip 
-                        label={category}
-                        size="small"
-                        sx={{ bgcolor: getCategoryColor(category) }}
-                      />
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        {count} tickets
-                      </Typography>
+                {Object.entries(metrics.byCategory).length > 0 ? (
+                  Object.entries(metrics.byCategory).map(([category, count]) => (
+                    <Box key={category} sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Chip 
+                          label={category}
+                          size="small"
+                          sx={{ bgcolor: getCategoryColor(category) }}
+                        />
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {count} tickets
+                        </Typography>
+                      </Box>
                     </Box>
-                  </Box>
-                ))}
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Nenhum dado disponível para este período
+                  </Typography>
+                )}
               </Box>
             </CardContent>
           </Card>
@@ -341,30 +381,36 @@ function Metrics() {
                 Status dos Seus Chamados
               </Typography>
               <Box sx={{ mt: 2 }}>
-                {Object.entries(metrics.byStatus).map(([status, count]) => (
-                  <Box key={status} sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2">{status.replace('_', ' ')}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        {count}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ 
-                      width: '100%', 
-                      height: 8, 
-                      bgcolor: 'grey.200', 
-                      borderRadius: 1,
-                      overflow: 'hidden'
-                    }}>
+                {Object.entries(metrics.byStatus).length > 0 ? (
+                  Object.entries(metrics.byStatus).map(([status, count]) => (
+                    <Box key={status} sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="body2">{status.replace('_', ' ')}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {count}
+                        </Typography>
+                      </Box>
                       <Box sx={{ 
-                        width: metrics.myCreated > 0 ? `${(count / metrics.myCreated) * 100}%` : '0%',
-                        height: '100%',
-                        bgcolor: getStatusColor(status),
-                        transition: 'width 0.3s ease'
-                      }} />
+                        width: '100%', 
+                        height: 8, 
+                        bgcolor: 'grey.200', 
+                        borderRadius: 1,
+                        overflow: 'hidden'
+                      }}>
+                        <Box sx={{ 
+                          width: metrics.myCreated > 0 ? `${(count / metrics.myCreated) * 100}%` : '0%',
+                          height: '100%',
+                          bgcolor: getStatusColor(status),
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </Box>
                     </Box>
-                  </Box>
-                ))}
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Nenhum dado disponível para este período
+                  </Typography>
+                )}
               </Box>
             </CardContent>
           </Card>
@@ -476,34 +522,40 @@ function Metrics() {
                 Ranking de Helpers
               </Typography>
               <List sx={{ pt: 0 }}>
-                {sortedPerformers.map((performer, index) => (
-                  <React.Fragment key={index}>
-                    <ListItem sx={{ px: 0 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                        <Avatar sx={{ 
-                          bgcolor: performer.name === (auth.user?.name || auth.user?.username) ? '#4caf50' : 
-                                  index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#4966f2',
-                          mr: 2,
-                          width: 32,
-                          height: 32
-                        }}>
-                          {performer.name === (auth.user?.name || auth.user?.username) ? <Star /> : index + 1}
-                        </Avatar>
-                        <Box sx={{ flexGrow: 1 }}>
-                          <Typography variant="body1" sx={{ 
-                            fontWeight: performer.name === (auth.user?.name || auth.user?.username) ? 'bold' : 'medium' 
+                {sortedPerformers.length > 0 ? (
+                  sortedPerformers.map((performer, index) => (
+                    <React.Fragment key={index}>
+                      <ListItem sx={{ px: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                          <Avatar sx={{ 
+                            bgcolor: performer.name === (auth.user?.name || auth.user?.username) ? '#4caf50' : 
+                                    index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#4966f2',
+                            mr: 2,
+                            width: 32,
+                            height: 32
                           }}>
-                            {performer.name} {performer.name === (auth.user?.name || auth.user?.username) && '(Você)'}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {performer.count} resolvidos
-                          </Typography>
+                            {performer.name === (auth.user?.name || auth.user?.username) ? <Star /> : index + 1}
+                          </Avatar>
+                          <Box sx={{ flexGrow: 1 }}>
+                            <Typography variant="body1" sx={{ 
+                              fontWeight: performer.name === (auth.user?.name || auth.user?.username) ? 'bold' : 'medium' 
+                            }}>
+                              {performer.name} {performer.name === (auth.user?.name || auth.user?.username) && '(Você)'}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {performer.count} resolvidos
+                            </Typography>
+                          </Box>
                         </Box>
-                      </Box>
-                    </ListItem>
-                    {index < sortedPerformers.length - 1 && <Divider />}
-                  </React.Fragment>
-                ))}
+                      </ListItem>
+                      {index < sortedPerformers.length - 1 && <Divider />}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+                    Nenhum dado de performance disponível
+                  </Typography>
+                )}
               </List>
             </CardContent>
           </Card>
@@ -572,30 +624,36 @@ function Metrics() {
                 Chamados por Status
               </Typography>
               <Box sx={{ mt: 2 }}>
-                {Object.entries(metrics.byStatus).map(([status, count]) => (
-                  <Box key={status} sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2">{status.replace('_', ' ')}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        {count} ({((count / metrics.total) * 100).toFixed(1)}%)
-                      </Typography>
-                    </Box>
-                    <Box sx={{ 
-                      width: '100%', 
-                      height: 8, 
-                      bgcolor: 'grey.200', 
-                      borderRadius: 1,
-                      overflow: 'hidden'
-                    }}>
+                {Object.entries(metrics.byStatus).length > 0 ? (
+                  Object.entries(metrics.byStatus).map(([status, count]) => (
+                    <Box key={status} sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="body2">{status.replace('_', ' ')}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {count} ({((count / metrics.total) * 100).toFixed(1)}%)
+                        </Typography>
+                      </Box>
                       <Box sx={{ 
-                        width: `${(count / metrics.total) * 100}%`,
-                        height: '100%',
-                        bgcolor: getStatusColor(status),
-                        transition: 'width 0.3s ease'
-                      }} />
+                        width: '100%', 
+                        height: 8, 
+                        bgcolor: 'grey.200', 
+                        borderRadius: 1,
+                        overflow: 'hidden'
+                      }}>
+                        <Box sx={{ 
+                          width: `${(count / metrics.total) * 100}%`,
+                          height: '100%',
+                          bgcolor: getStatusColor(status),
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </Box>
                     </Box>
-                  </Box>
-                ))}
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Nenhum dado disponível
+                  </Typography>
+                )}
               </Box>
             </CardContent>
           </Card>
@@ -609,34 +667,40 @@ function Metrics() {
                 Chamados por Categoria
               </Typography>
               <Box sx={{ mt: 2 }}>
-                {Object.entries(metrics.byCategory).map(([category, count]) => (
-                  <Box key={category} sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                      <Chip 
-                        label={category}
-                        size="small"
-                        sx={{ bgcolor: getCategoryColor(category) }}
-                      />
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        {count} tickets
-                      </Typography>
-                    </Box>
-                    <Box sx={{ 
-                      width: '100%', 
-                      height: 6, 
-                      bgcolor: 'grey.200', 
-                      borderRadius: 1,
-                      overflow: 'hidden'
-                    }}>
+                {Object.entries(metrics.byCategory).length > 0 ? (
+                  Object.entries(metrics.byCategory).map(([category, count]) => (
+                    <Box key={category} sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Chip 
+                          label={category}
+                          size="small"
+                          sx={{ bgcolor: getCategoryColor(category) }}
+                        />
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {count} tickets
+                        </Typography>
+                      </Box>
                       <Box sx={{ 
-                        width: `${(count / metrics.total) * 100}%`,
-                        height: '100%',
-                        bgcolor: '#4966f2',
-                        transition: 'width 0.3s ease'
-                      }} />
+                        width: '100%', 
+                        height: 6, 
+                        bgcolor: 'grey.200', 
+                        borderRadius: 1,
+                        overflow: 'hidden'
+                      }}>
+                        <Box sx={{ 
+                          width: `${(count / metrics.total) * 100}%`,
+                          height: '100%',
+                          bgcolor: '#4966f2',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </Box>
                     </Box>
-                  </Box>
-                ))}
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Nenhum dado disponível
+                  </Typography>
+                )}
               </Box>
             </CardContent>
           </Card>
@@ -650,31 +714,37 @@ function Metrics() {
                 Top Performers
               </Typography>
               <List sx={{ pt: 0 }}>
-                {sortedPerformers.map((performer, index) => (
-                  <React.Fragment key={index}>
-                    <ListItem sx={{ px: 0 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                        <Avatar sx={{ 
-                          bgcolor: index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#4966f2',
-                          mr: 2,
-                          width: 32,
-                          height: 32
-                        }}>
-                          {index + 1}
-                        </Avatar>
-                        <Box sx={{ flexGrow: 1 }}>
-                          <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-                            {performer.name}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {performer.count} chamados resolvidos
-                          </Typography>
+                {sortedPerformers.length > 0 ? (
+                  sortedPerformers.map((performer, index) => (
+                    <React.Fragment key={index}>
+                      <ListItem sx={{ px: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                          <Avatar sx={{ 
+                            bgcolor: index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#4966f2',
+                            mr: 2,
+                            width: 32,
+                            height: 32
+                          }}>
+                            {index + 1}
+                          </Avatar>
+                          <Box sx={{ flexGrow: 1 }}>
+                            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                              {performer.name}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {performer.count} chamados resolvidos
+                            </Typography>
+                          </Box>
                         </Box>
-                      </Box>
-                    </ListItem>
-                    {index < sortedPerformers.length - 1 && <Divider />}
-                  </React.Fragment>
-                ))}
+                      </ListItem>
+                      {index < sortedPerformers.length - 1 && <Divider />}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+                    Nenhum dado de performance disponível
+                  </Typography>
+                )}
               </List>
             </CardContent>
           </Card>
@@ -717,44 +787,44 @@ function Metrics() {
                 <Chip 
                   label={`${metrics.resolutionRate.toFixed(1)}%`}
                   color={metrics.resolutionRate >= 80 ? 'success' : metrics.resolutionRate >= 60 ? 'warning' : 'error'}
-                  sx={{ fontWeight: 'bold' }}
-                />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-    </>
-  );
+                 sx={{ fontWeight: 'bold' }}
+               />
+             </Box>
+           </CardContent>
+         </Card>
+       </Grid>
+     </Grid>
+   </>
+ );
 
-  return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <PageHeader title={`Métricas ${isUser ? 'Pessoais' : isHelper ? 'de Performance' : 'do Sistema'}`} />
-        
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Período</InputLabel>
-          <Select
-            value={period}
-            label="Período"
-            onChange={(e) => setPeriod(e.target.value)}
-          >
-            <MenuItem value="week">Última Semana</MenuItem>
-            <MenuItem value="month">Último Mês</MenuItem>
-            <MenuItem value="quarter">Último Trimestre</MenuItem>
-            <MenuItem value="year">Último Ano</MenuItem>
-          </Select>
-        </FormControl>
-      </Box>
+ return (
+   <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+       <PageHeader title={`Métricas ${isUser ? 'Pessoais' : isHelper ? 'de Performance' : 'do Sistema'}`} />
+       
+       <FormControl size="small" sx={{ minWidth: 120 }}>
+         <InputLabel>Período</InputLabel>
+         <Select
+           value={period}
+           label="Período"
+           onChange={(e) => setPeriod(e.target.value)}
+         >
+           <MenuItem value="week">Última Semana</MenuItem>
+           <MenuItem value="month">Último Mês</MenuItem>
+           <MenuItem value="quarter">Último Trimestre</MenuItem>
+           <MenuItem value="year">Último Ano</MenuItem>
+         </Select>
+       </FormControl>
+     </Box>
 
-      {error && <ErrorHandler message={error} onRetry={fetchData} />}
+     {error && <ErrorHandler message={error} onRetry={fetchData} />}
 
-      {/* Renderizar métricas baseadas no papel do usuário */}
-      {isUser && renderUserMetrics()}
-      {isHelper && renderHelperMetrics()}
-      {isAdmin && renderAdminMetrics()}
-    </Container>
-  );
+     {/* Renderizar métricas baseadas no papel do usuário */}
+     {isUser && renderUserMetrics()}
+     {isHelper && renderHelperMetrics()}
+     {isAdmin && renderAdminMetrics()}
+   </Container>
+ );
 }
 
 export default Metrics;

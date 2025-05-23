@@ -39,7 +39,6 @@ function NewTicket() {
       [name]: value
     }));
     
-    // Clear the error for this field
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -86,25 +85,20 @@ function NewTicket() {
   const validateForm = () => {
     const newErrors = {};
     
-    // Validate title
     const titleError = validateRequired(formData.title, 'Título');
     if (titleError) newErrors.title = titleError;
     
-    // Check title length
     if (formData.title && (formData.title.length < 5 || formData.title.length > 100)) {
       newErrors.title = "O título deve ter entre 5 e 100 caracteres";
     }
     
-    // Validate description
     const descriptionError = validateRequired(formData.description, 'Descrição');
     if (descriptionError) newErrors.description = descriptionError;
     
-    // Check description length
     if (formData.description && (formData.description.length < 10 || formData.description.length > 1000)) {
       newErrors.description = "A descrição deve ter entre 10 e 1000 caracteres";
     }
     
-    // Validate category
     const categoryError = validateRequired(formData.category, 'Categoria');
     if (categoryError) newErrors.category = categoryError;
     
@@ -123,23 +117,20 @@ function NewTicket() {
     setError(null);
 
     try {
-      // Create FormData to match the expected backend format
       const formDataToSend = new FormData();
       formDataToSend.append('title', formData.title);
       formDataToSend.append('description', formData.description);
       formDataToSend.append('category', formData.category);
 
-      // Only append image if one is selected
       if (selectedImage) {
         formDataToSend.append('image', selectedImage);
       }
 
-      // Call the appropriate endpoint
-      const response = await ticketService.createTicketWithImage(formDataToSend);
+      // Usar o novo endpoint com validação e resposta padronizada
+      const response = await ticketService.createTicketNew(formDataToSend);
 
       setOpenSnackbar(true);
 
-      // Add notification if context is available
       if (notificationsContext && typeof notificationsContext.addNotification === 'function') {
         try {
           notificationsContext.addNotification({
@@ -155,13 +146,24 @@ function NewTicket() {
         }
       }
 
-      // Navigate after a brief delay
       setTimeout(() => {
         navigate('/tickets');
       }, 1500);
     } catch (error) {
       console.error('Erro ao criar chamado:', error);
-      setError(`Erro ao criar chamado: ${error.message || 'Erro desconhecido'}`);
+      
+      // Tratar erros de validação do backend
+      if (error.response && error.response.status === 400) {
+        const errorData = error.response.data;
+        if (errorData.error && typeof errorData.error === 'object') {
+          // Erros de validação
+          setErrors(errorData.error);
+        } else {
+          setError(errorData.message || 'Erro de validação');
+        }
+      } else {
+        setError(`Erro ao criar chamado: ${error.message || 'Erro desconhecido'}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -197,7 +199,6 @@ function NewTicket() {
         )}
 
         <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
-          {/* Title field */}
           <TextField
             fullWidth
             label="Título"
@@ -212,7 +213,6 @@ function NewTicket() {
             sx={{ mb: 2, '.MuiOutlinedInput-root': { bgcolor: 'white' } }}
           />
 
-          {/* Category field */}
           <FormControl fullWidth margin="normal" sx={{ mb: 2 }} error={!!errors.category}>
             <InputLabel id="category-label">Categoria *</InputLabel>
             <Select
@@ -236,7 +236,6 @@ function NewTicket() {
             )}
           </FormControl>
 
-          {/* Description field */}
           <Box
             sx={{
               p: 3,
