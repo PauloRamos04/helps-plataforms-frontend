@@ -37,14 +37,12 @@ export const AuthProvider = ({ children }) => {
               sessionId
             });
           } catch (error) {
-            console.error('Error parsing user JSON:', error);
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             localStorage.removeItem('sessionId');
           }
         }
       } catch (error) {
-        console.error('Error during auth initialization:', error);
       } finally {
         setIsLoading(false);
       }
@@ -85,7 +83,6 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(false);
       return response;
     } catch (error) {
-      console.error('Error in login function:', error);
       setIsLoading(false);
       return {
         success: false,
@@ -102,7 +99,6 @@ export const AuthProvider = ({ children }) => {
         await authService.logout(sessionId);
       }
     } catch (error) {
-      console.error('Erro ao fazer logout:', error);
     } finally {
       localStorage.removeItem('token');
       localStorage.removeItem('user');

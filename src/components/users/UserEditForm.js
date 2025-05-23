@@ -37,7 +37,7 @@ const UserEditForm = ({ open, onClose, user, onSuccess }) => {
             {error}
           </Alert>
         )}
-        
+
         <Box sx={{ mt: 2 }}>
           <TextField
             fullWidth
@@ -60,6 +60,23 @@ const UserEditForm = ({ open, onClose, user, onSuccess }) => {
             inputProps={{ maxLength: 100 }}
           />
 
+          {!initialData && (
+            <TextField
+              fullWidth
+              label="Senha"
+              name="password"
+              type="password"
+              value={formData.password}
+              onChange={handleChange}
+              margin="normal"
+              required
+              sx={{ mb: 2 }}
+              inputProps={{ minLength: 6 }}
+              error={!!errors.password}
+              helperText={errors.password || "A senha deve ter pelo menos 6 caracteres"}
+            />
+          )}
+
           <FormControl fullWidth margin="normal">
             <InputLabel id="role-edit-label">Perfil</InputLabel>
             <Select
@@ -80,10 +97,10 @@ const UserEditForm = ({ open, onClose, user, onSuccess }) => {
         <Button onClick={onClose} disabled={loading}>
           Cancelar
         </Button>
-        <Button 
-          onClick={handleSubmit} 
+        <Button
+          onClick={handleSubmit}
           color="primary"
-          variant="contained" 
+          variant="contained"
           disabled={loading}
           sx={{ bgcolor: '#4966f2' }}
         >

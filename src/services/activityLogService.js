@@ -8,7 +8,6 @@ export const activityLogService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar logs de atividade:', error);
       throw new Error('Não foi possível carregar os logs de atividade');
     }
   },
@@ -20,7 +19,6 @@ export const activityLogService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar logs por período:', error);
       throw new Error('Não foi possível carregar os logs do período');
     }
   },
@@ -32,7 +30,6 @@ export const activityLogService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar sessões:', error);
       throw new Error('Não foi possível carregar as sessões');
     }
   },
@@ -42,7 +39,6 @@ export const activityLogService = {
       const response = await api.get('/admin/activity/sessions/active');
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar sessões ativas:', error);
       throw new Error('Não foi possível carregar as sessões ativas');
     }
   },
@@ -52,7 +48,6 @@ export const activityLogService = {
       const response = await api.get('/admin/activity/stats');
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar estatísticas:', error);
       throw new Error('Não foi possível carregar as estatísticas');
     }
   }

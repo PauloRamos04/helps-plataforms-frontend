@@ -12,7 +12,6 @@ const parseJwt = (token) => {
     );
     return JSON.parse(jsonPayload);
   } catch (e) {
-    console.error('Error parsing JWT:', e);
     return null;
   }
 };
@@ -67,7 +66,6 @@ export const authService = {
       const response = await api.post('/logout', { sessionId });
       return response.data;
     } catch (error) {
-      console.error('Erro no logout:', error);
       return { success: false, message: 'Erro ao fazer logout' };
     }
   },
