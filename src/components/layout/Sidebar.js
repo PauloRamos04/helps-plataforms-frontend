@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   Box, Divider, Typography, 
   IconButton 
@@ -9,6 +9,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ListIcon from '@mui/icons-material/List';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AuthContext from '../../context/AuthContext';
 import alaresLogo from '../../assets/alares.png';
@@ -66,15 +67,14 @@ const Logo = () => (
 
 function Sidebar() {
   const { auth, logout } = useContext(AuthContext);
-  const navigate = useNavigate();
   const location = useLocation();
   
   const isAdmin = auth?.user?.roles?.includes('ADMIN') || 
                   auth?.user?.roles?.includes('ROLE_ADMIN');
   
-  const handleLogout = () => {
+  const handleLogout = (e) => {
+    e.preventDefault();
     logout();
-    navigate('/login');
   };
 
   const pathname = location.pathname;
@@ -95,10 +95,8 @@ function Sidebar() {
         zIndex: 100
       }}
     >
-      {/* Logo on top */}
       <Logo />
       
-      {/* Menu Items */}
       <Box sx={{ flex: 1 }}>
         <MenuItem 
           to="/dashboard" 
@@ -132,7 +130,6 @@ function Sidebar() {
           Minhas métricas
         </MenuItem>
         
-        {/* User Management option - Admin only */}
         {isAdmin && (
           <>
             <Divider sx={{ my: 2, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
@@ -148,11 +145,18 @@ function Sidebar() {
             >
               Gerenciar Usuários
             </MenuItem>
+
+            <MenuItem 
+              to="/admin/activity" 
+              active={pathname === '/admin/activity'}
+              icon={<AssessmentIcon fontSize="small" />}
+            >
+              Logs de Atividade
+            </MenuItem>
           </>
         )}
       </Box>
       
-      {/* Logout at bottom */}
       <Box sx={{ mt: 'auto' }}>
         <Box
           component="button"
@@ -168,8 +172,9 @@ function Sidebar() {
             p: 1,
             cursor: 'pointer',
             fontSize: '14px',
+            borderRadius: '4px',
             '&:hover': {
-              textDecoration: 'underline'
+              bgcolor: 'rgba(255, 255, 255, 0.1)'
             }
           }}
         >

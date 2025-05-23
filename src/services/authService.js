@@ -1,6 +1,5 @@
 import api from '../api.js';
 
-// Helper function to parse JWT tokens
 const parseJwt = (token) => {
   try {
     const base64Url = token.split('.')[1];
@@ -19,7 +18,6 @@ const parseJwt = (token) => {
 };
 
 export const authService = {
-  // Login user
   login: async (credentials) => {
     try {
       const response = await api.post('/login', credentials);
@@ -37,18 +35,17 @@ export const authService = {
             name: tokenPayload.name || tokenPayload.nome || tokenPayload.username
           };
           
-          // Normalize roles
+          const sessionId = tokenPayload.sessionId;
+          
           if (!Array.isArray(user.roles)) {
             user.roles = [user.roles];
           }
           
-          localStorage.setItem('token', token);
-          localStorage.setItem('user', JSON.stringify(user));
-          
           return {
             success: true,
             user,
-            token
+            token,
+            sessionId
           };
         }
       }
@@ -65,20 +62,20 @@ export const authService = {
     }
   },
   
-  // Logout user
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    
-    return { success: true };
+  logout: async (sessionId) => {
+    try {
+      const response = await api.post('/logout', { sessionId });
+      return response.data;
+    } catch (error) {
+      console.error('Erro no logout:', error);
+      return { success: false, message: 'Erro ao fazer logout' };
+    }
   },
   
-  // Check if user is authenticated
   isAuthenticated: () => {
     return !!localStorage.getItem('token');
   },
   
-  // Get current user data
   getCurrentUser: () => {
     const userStr = localStorage.getItem('user');
     if (userStr) {

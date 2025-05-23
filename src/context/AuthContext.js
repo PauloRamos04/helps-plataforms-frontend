@@ -7,7 +7,8 @@ export const AuthProvider = ({ children }) => {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
     user: null,
-    token: null
+    token: null,
+    sessionId: null
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -17,14 +18,12 @@ export const AuthProvider = ({ children }) => {
       try {
         const token = localStorage.getItem('token');
         const userStr = localStorage.getItem('user');
-
-        console.log('Initial auth check - token exists:', !!token);
+        const sessionId = localStorage.getItem('sessionId');
 
         if (token && userStr) {
           try {
             const user = JSON.parse(userStr);
             
-            // Normalize roles to always be an array
             if (!user.roles) {
               user.roles = [];
             } else if (!Array.isArray(user.roles)) {
@@ -34,16 +33,14 @@ export const AuthProvider = ({ children }) => {
             setAuth({
               isAuthenticated: true,
               user,
-              token
+              token,
+              sessionId
             });
-
-            console.log('Auth initialized from localStorage - user:', user.username);
-            console.log('User roles:', user.roles);
           } catch (error) {
             console.error('Error parsing user JSON:', error);
-            // Clear invalid data
             localStorage.removeItem('token');
             localStorage.removeItem('user');
+            localStorage.removeItem('sessionId');
           }
         }
       } catch (error) {
@@ -62,35 +59,27 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authService.login(credentials);
 
-      console.log('Login response:', response);
-
       if (response.success) {
-        console.log('Login successful, updating state');
-
         const user = response.user;
         const token = response.token;
+        const sessionId = response.sessionId;
 
-        // Ensure roles is an array
         if (!user.roles) {
           user.roles = [];
         } else if (!Array.isArray(user.roles)) {
           user.roles = [user.roles];
         }
 
-        // Explicitly store in localStorage
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('sessionId', sessionId);
 
         setAuth({
           isAuthenticated: true,
           user: user,
-          token: token
+          token: token,
+          sessionId: sessionId
         });
-
-        console.log('User roles after login:', user.roles);
-        console.log('Token stored:', !!localStorage.getItem('token'));
-      } else {
-        console.log('Login failed:', response.message);
       }
 
       setIsLoading(false);
@@ -105,14 +94,29 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    authService.logout();
+  const logout = async () => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      
+      if (sessionId) {
+        await authService.logout(sessionId);
+      }
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('sessionId');
+      
+      setAuth({
+        isAuthenticated: false,
+        user: null,
+        token: null,
+        sessionId: null
+      });
 
-    setAuth({
-      isAuthenticated: false,
-      user: null,
-      token: null
-    });
+      window.location.href = '/login';
+    }
   };
 
   const hasRole = (roleToCheck) => {
