@@ -1,4 +1,5 @@
 import axios from 'axios';
+import tokenService from './services/tokenService';
 
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8080',
@@ -6,7 +7,7 @@ const api = axios.create({
     'Content-Type': 'application/json'
   },
   withCredentials: true,
-  timeout: 15000
+  timeout: 30000
 });
 
 const translateError = (error) => {
@@ -53,10 +54,19 @@ const translateError = (error) => {
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
+    const token = tokenService.getToken();
+    if (token && !tokenService.isTokenExpired(token)) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (token && tokenService.isTokenExpired(token)) {
+      tokenService.clearAuth();
+      window.location.href = '/login';
+      return Promise.reject(new Error('Token expirado'));
     }
+    
+    if (tokenService.refreshTokenIfNeeded()) {
+      console.warn('Token expirando em breve - considere implementar refresh');
+    }
+    
     return config;
   },
   (error) => {
@@ -75,9 +85,11 @@ api.interceptors.response.use(
     translatedError.status = error.response?.status;
 
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      tokenService.clearAuth();
+      
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
     
     return Promise.reject(translatedError);
