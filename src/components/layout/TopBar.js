@@ -23,14 +23,12 @@ const TopBar = ({ user }) => {
       }}
     >
       <Toolbar sx={{ justifyContent: 'space-between' }}>
-        {/* User name on the left */}
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Typography variant="subtitle1" sx={{ color: '#333', fontWeight: 'medium' }}>
             Olá, {getUserName()}
           </Typography>
         </Box>
         
-        {/* Notifications and Avatar on the right */}
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <NotificationsMenu />
           

@@ -52,7 +52,7 @@ function NewTicket() {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setError('Apenas arquivos de imagem são permitidos');
+      setError('Apenas arquivos de imagem são permitidos (JPG, PNG, GIF)');
       return;
     }
 
@@ -68,8 +68,7 @@ function NewTicket() {
       setImagePreview(reader.result);
     };
     reader.onerror = () => {
-      console.error("Erro ao ler o arquivo:", reader.error);
-      setError('Erro ao ler o arquivo selecionado');
+      setError('Erro ao processar o arquivo selecionado');
     };
     reader.readAsDataURL(file);
   };
@@ -126,7 +125,6 @@ function NewTicket() {
         formDataToSend.append('image', selectedImage);
       }
 
-      // Usar o novo endpoint com validação e resposta padronizada
       const response = await ticketService.createTicketNew(formDataToSend);
 
       setOpenSnackbar(true);
@@ -134,7 +132,7 @@ function NewTicket() {
       if (notificationsContext && typeof notificationsContext.addNotification === 'function') {
         try {
           notificationsContext.addNotification({
-            message: `Novo chamado criado: ${formData.title}`,
+            message: `Chamado criado: ${formData.title}`,
             type: 'NOVO_CHAMADO',
             read: false,
             chamadoId: response.id,
@@ -142,7 +140,6 @@ function NewTicket() {
             categoria: formData.category
           });
         } catch (notifError) {
-          console.warn("Falha ao adicionar notificação:", notifError);
         }
       }
 
@@ -150,19 +147,17 @@ function NewTicket() {
         navigate('/tickets');
       }, 1500);
     } catch (error) {
-      console.error('Erro ao criar chamado:', error);
-      
-      // Tratar erros de validação do backend
       if (error.response && error.response.status === 400) {
         const errorData = error.response.data;
         if (errorData.error && typeof errorData.error === 'object') {
-          // Erros de validação
           setErrors(errorData.error);
         } else {
-          setError(errorData.message || 'Erro de validação');
+          setError(errorData.message || 'Dados inválidos. Verifique os campos obrigatórios.');
         }
+      } else if (error.message) {
+        setError(error.message);
       } else {
-        setError(`Erro ao criar chamado: ${error.message || 'Erro desconhecido'}`);
+        setError('Erro inesperado ao criar chamado. Tente novamente.');
       }
     } finally {
       setLoading(false);
@@ -339,7 +334,7 @@ function NewTicket() {
               {loading ? (
                 <CircularProgress size={24} color="inherit" />
               ) : (
-                'Enviar Chamado'
+                'Criar Chamado'
               )}
             </Button>
           </Box>

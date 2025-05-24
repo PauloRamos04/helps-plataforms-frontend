@@ -87,7 +87,6 @@ const NotificationsMenu = () => {
     }
   };
 
-  // Função para adicionar notificação de teste
   const handleAddTestNotification = (e) => {
     e.stopPropagation();
     addDummyNotification();
@@ -128,7 +127,6 @@ const NotificationsMenu = () => {
           </Typography>
           
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* Indicador de conexão */}
             <Chip 
               label={wsConnected ? 'Online' : 'Offline'} 
               size="small"
@@ -161,8 +159,7 @@ const NotificationsMenu = () => {
               </IconButton>
             </Tooltip>
 
-            {/* Botão de teste - apenas em desenvolvimento */}
-            {process.env.NODE_ENV === 'development' && (
+            {/* {process.env.NODE_ENV === 'development' && (
               <Tooltip title="Adicionar notificação de teste">
                 <IconButton 
                   size="small" 
@@ -172,7 +169,7 @@ const NotificationsMenu = () => {
                   <InfoIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-            )}
+            )} */}
           </Box>
         </Box>
         
@@ -247,8 +244,7 @@ const NotificationsMenu = () => {
               Nenhuma notificação no momento
             </Typography>
             
-            {/* Botão de teste quando não há notificações */}
-            {process.env.NODE_ENV === 'development' && (
+            {/* {process.env.NODE_ENV === 'development' && (
               <Button 
                 size="small"
                 variant="outlined"
@@ -257,7 +253,7 @@ const NotificationsMenu = () => {
               >
                 Adicionar Teste
               </Button>
-            )}
+            )} */}
           </Box>
         )}
       </Menu>

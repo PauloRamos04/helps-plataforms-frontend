@@ -10,10 +10,8 @@ function Layout() {
   
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
-      {/* Sidebar */}
       <Sidebar />
 
-      {/* Main content area */}
       <Box
         component="main"
         sx={{

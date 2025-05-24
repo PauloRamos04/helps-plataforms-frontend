@@ -1,4 +1,3 @@
-// src/routes.js - ATUALIZAR o arquivo existente
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
@@ -12,7 +11,8 @@ const TicketsList = lazy(() => import('./pages/TicketsList'));
 const TicketDetail = lazy(() => import('./pages/TicketDetail'));
 const NewTicket = lazy(() => import('./pages/NewTicket'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
-const ActivityLogs = lazy(() => import('./pages/ActivityLogs')); // NOVA IMPORTAÇÃO
+const ActivityLogs = lazy(() => import('./pages/ActivityLogs'));
+const Metrics = lazy(() => import('./pages/Metrics'));
 
 const AppRoutes = () => {
   return (
@@ -51,6 +51,12 @@ const AppRoutes = () => {
             </Suspense>
           } />
           
+          <Route path="metrics" element={
+            <Suspense fallback={<LoadingFallback />}>
+              <Metrics />
+            </Suspense>
+          } />
+          
           <Route path="admin/users" element={
             <PrivateRoute requiredRole="ADMIN">
               <Suspense fallback={<LoadingFallback />}>
@@ -59,7 +65,6 @@ const AppRoutes = () => {
             </PrivateRoute>
           } />
 
-          {/* NOVA ROTA - Logs de Atividade */}
           <Route path="admin/activity" element={
             <PrivateRoute requiredRole="ADMIN">
               <Suspense fallback={<LoadingFallback />}>

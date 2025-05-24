@@ -1,7 +1,8 @@
 import React, { useState, useContext } from 'react';
 import { 
   Box, Typography, Button, Divider, CircularProgress,
-  Paper, Chip, Tooltip, Dialog, DialogContent
+  Paper, Chip, Tooltip, Dialog, DialogContent, DialogTitle,
+  DialogActions, DialogContentText
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import AuthContext from '../../context/AuthContext';
@@ -13,16 +14,15 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
   const { auth } = useContext(AuthContext);
   const [actionInProgress, setActionInProgress] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [confirmCloseDialog, setConfirmCloseDialog] = useState(false);
   
   const handleAderir = async () => {
     try {
       setActionInProgress(true);
-      // Tentar primeiro o novo endpoint, depois o legado se falhar
       try {
         await ticketService.assignTicket(ticket.id);
       } catch (error) {
         if (error.response && error.response.status === 404) {
-          // Fallback para endpoint legado
           await ticketService.assignTicketLegacy(ticket.id);
         } else {
           throw error;
@@ -36,15 +36,23 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
     }
   };
   
+  const handleOpenCloseConfirmation = () => {
+    setConfirmCloseDialog(true);
+  };
+
+  const handleCloseConfirmation = () => {
+    setConfirmCloseDialog(false);
+  };
+  
   const handleFinalizar = async () => {
     try {
       setActionInProgress(true);
-      // Tentar primeiro o novo endpoint, depois o legado se falhar
+      setConfirmCloseDialog(false);
+      
       try {
         await ticketService.closeTicket(ticket.id);
       } catch (error) {
         if (error.response && error.response.status === 404) {
-          // Fallback para endpoint legado
           await ticketService.closeTicketLegacy(ticket.id);
         } else {
           throw error;
@@ -108,194 +116,196 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
   const imageUrl = ticket.imagePath ? ticketService.getImageUrl(ticket.imagePath) : null;
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ 
-        p: 2,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-      }}
-    >
-      <Box>
-        <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
-          Descrição do Chamado
-        </Typography>
-        
-        <Typography 
-          variant="body1" 
-          sx={{ 
-            whiteSpace: 'pre-wrap', 
-            mb: imageUrl ? 3 : 0,
-            color: '#333',
-            wordBreak: 'break-word',
-            lineHeight: 1.6
-          }}
-        >
-          {ticket.description}
-        </Typography>
-        
-        {imageUrl && (
-          <Box sx={{ mt: 3, textAlign: 'center', position: 'relative' }}>
-            <Box 
-              sx={{ 
-                position: 'relative', 
-                display: 'inline-block',
-                maxWidth: '100%',
-                '&:hover .zoom-icon': {
-                  opacity: 1
-                }
-              }}
-            >
-              <img 
-                src={imageUrl} 
-                alt="Anexo do chamado" 
-                style={{ 
-                  maxWidth: '100%', 
-                  maxHeight: '300px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                }}
-                onClick={handleOpenImageDialog}
-              />
-              <Box 
-                className="zoom-icon"
-                sx={{ 
-                  position: 'absolute', 
-                  top: '8px', 
-                  right: '8px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                  borderRadius: '50%',
-                  padding: '4px',
-                  cursor: 'pointer',
-                  opacity: 0,
-                  transition: 'opacity 0.2s ease-in-out'
-                }}
-                onClick={handleOpenImageDialog}
-              >
-                <ZoomOutMapIcon fontSize="small" />
-              </Box>
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              Clique para ampliar a imagem
-            </Typography>
-          </Box>
-        )}
-      </Box>
-
-      <Divider />
-
-      <Box>
-        <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
-          Informações do Chamado
-        </Typography>
-        
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Atendente Designado
+    <>
+      <Paper
+        elevation={0}
+        sx={{ 
+          p: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3,
+          border: '1px solid #e0e0e0',
+          borderRadius: '8px',
+        }}
+      >
+        <Box>
+          <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
+            Descrição do Chamado
           </Typography>
           
-          {ticket.helper ? (
-            <Box sx={{ mb: 2 }}>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              whiteSpace: 'pre-wrap', 
+              mb: imageUrl ? 3 : 0,
+              color: '#333',
+              wordBreak: 'break-word',
+              lineHeight: 1.6
+            }}
+          >
+            {ticket.description}
+          </Typography>
+          
+          {imageUrl && (
+            <Box sx={{ mt: 3, textAlign: 'center', position: 'relative' }}>
               <Box 
                 sx={{ 
-                  p: 2, 
-                  border: '1px solid #e0e0e0', 
-                  borderRadius: '4px',
-                  bgcolor: '#f9f9f9'
+                  position: 'relative', 
+                  display: 'inline-block',
+                  maxWidth: '100%',
+                  '&:hover .zoom-icon': {
+                    opacity: 1
+                  }
                 }}
               >
-                <Typography variant="body1" sx={{ fontWeight: 'medium', mb: 0.5 }}>
-                  {ticket.helper.name || ticket.helper.username}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {ticket.startDate ? `Atendendo desde ${formatDate(ticket.startDate)}` : ''}
-                </Typography>
+                <img 
+                  src={imageUrl} 
+                  alt="Anexo do chamado" 
+                  style={{ 
+                    maxWidth: '100%', 
+                    maxHeight: '300px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                  onClick={handleOpenImageDialog}
+                />
+                <Box 
+                  className="zoom-icon"
+                  sx={{ 
+                    position: 'absolute', 
+                    top: '8px', 
+                    right: '8px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                    borderRadius: '50%',
+                    padding: '4px',
+                    cursor: 'pointer',
+                    opacity: 0,
+                    transition: 'opacity 0.2s ease-in-out'
+                  }}
+                  onClick={handleOpenImageDialog}
+                >
+                  <ZoomOutMapIcon fontSize="small" />
+                </Box>
               </Box>
-            </Box>
-          ) : (
-            <Box 
-              sx={{ 
-                p: 2, 
-                border: '1px dashed #bdbdbd', 
-                borderRadius: '4px',
-                bgcolor: '#fafafa',
-                textAlign: 'center'
-              }}
-            >
-              <Typography variant="body2" color="text.secondary">
-                Nenhum atendente designado
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Clique para ampliar a imagem
               </Typography>
             </Box>
           )}
         </Box>
 
-        {!hideActions && (
-          <>
-            <Divider sx={{ my: 2 }} />
+        <Divider />
 
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Ações
-              </Typography>
-              
-              {isHelperOrAdmin() && ticket.status === 'ABERTO' && (
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={handleAderir}
-                  disabled={actionInProgress}
+        <Box>
+          <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
+            Informações do Chamado
+          </Typography>
+          
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Atendente Designado
+            </Typography>
+            
+            {ticket.helper ? (
+              <Box sx={{ mb: 2 }}>
+                <Box 
                   sx={{ 
-                    bgcolor: '#4966f2',
+                    p: 2, 
+                    border: '1px solid #e0e0e0', 
                     borderRadius: '4px',
-                    textTransform: 'none',
-                    mb: 2,
-                    py: 1
+                    bgcolor: '#f9f9f9'
                   }}
                 >
-                  {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Assumir Este Chamado'}
-                </Button>
-              )}
-
-              {isHelperOrAdmin() && ticket.status === 'EM_ATENDIMENTO' && (
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={handleFinalizar}
-                  disabled={actionInProgress}
-                  sx={{ 
-                    bgcolor: '#4CAF50',
-                    borderRadius: '4px',
-                    textTransform: 'none',
-                    mb: 2,
-                    py: 1
-                  }}
-                >
-                  {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Finalizar Chamado'}
-                </Button>
-              )}
-
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={() => navigate('/tickets')}
+                  <Typography variant="body1" sx={{ fontWeight: 'medium', mb: 0.5 }}>
+                    {ticket.helper.name || ticket.helper.username}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {ticket.startDate ? `Atendendo desde ${formatDate(ticket.startDate)}` : ''}
+                  </Typography>
+                </Box>
+              </Box>
+            ) : (
+              <Box 
                 sx={{ 
-                  borderColor: '#e0e0e0',
-                  color: '#666',
+                  p: 2, 
+                  border: '1px dashed #bdbdbd', 
                   borderRadius: '4px',
-                  textTransform: 'none',
-                  py: 1
+                  bgcolor: '#fafafa',
+                  textAlign: 'center'
                 }}
               >
-                Voltar para lista
-              </Button>
-            </Box>
-          </>
-        )}
-      </Box>
+                <Typography variant="body2" color="text.secondary">
+                  Nenhum atendente designado
+                </Typography>
+              </Box>
+            )}
+          </Box>
+
+          {!hideActions && (
+            <>
+              <Divider sx={{ my: 2 }} />
+
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Ações
+                </Typography>
+                
+                {isHelperOrAdmin() && ticket.status === 'ABERTO' && (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={handleAderir}
+                    disabled={actionInProgress}
+                    sx={{ 
+                      bgcolor: '#4966f2',
+                      borderRadius: '4px',
+                      textTransform: 'none',
+                      mb: 2,
+                      py: 1
+                    }}
+                  >
+                    {actionInProgress ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Assumir Este Chamado'}
+                  </Button>
+                )}
+
+                {isHelperOrAdmin() && ticket.status === 'EM_ATENDIMENTO' && (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={handleOpenCloseConfirmation}
+                    disabled={actionInProgress}
+                    sx={{ 
+                      bgcolor: '#4CAF50',
+                      borderRadius: '4px',
+                      textTransform: 'none',
+                      mb: 2,
+                      py: 1
+                    }}
+                  >
+                    Finalizar Chamado
+                  </Button>
+                )}
+
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  onClick={() => navigate('/tickets')}
+                  sx={{ 
+                    borderColor: '#e0e0e0',
+                    color: '#666',
+                    borderRadius: '4px',
+                    textTransform: 'none',
+                    py: 1
+                  }}
+                >
+                  Voltar para lista
+                </Button>
+              </Box>
+            </>
+          )}
+        </Box>
+      </Paper>
       
       <Dialog 
         open={imageDialogOpen} 
@@ -342,7 +352,42 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
           )}
         </DialogContent>
       </Dialog>
-    </Paper>
+
+      <Dialog
+        open={confirmCloseDialog}
+        onClose={handleCloseConfirmation}
+      >
+        <DialogTitle>Confirmar Finalização do Chamado</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Tem certeza que deseja finalizar este chamado?
+            <br />
+            <br />
+            <strong>Esta ação não poderá ser desfeita.</strong> O chamado será marcado como resolvido e não poderá mais receber mensagens.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={handleCloseConfirmation}
+            disabled={actionInProgress}
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleFinalizar}
+            variant="contained"
+            color="success"
+            disabled={actionInProgress}
+            sx={{ 
+              bgcolor: '#4CAF50',
+              '&:hover': { bgcolor: '#45a049' }
+            }}
+          >
+            {actionInProgress ? <CircularProgress size={20} sx={{ color: 'white' }} /> : 'Sim, Finalizar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 

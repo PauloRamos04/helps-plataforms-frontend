@@ -22,9 +22,8 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
-  const refreshIntervalRef = useRef(null);
+  const lastMessageCountRef = useRef(0);
   
-  // Extrair username do token JWT atual
   const getCurrentUserIdentifier = () => {
     const token = localStorage.getItem('token');
     if (!token) return null;
@@ -67,21 +66,12 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     if (!ticketId) return;
     
     fetchMessages();
-    
-    refreshIntervalRef.current = setInterval(() => {
-      fetchMessages(true);
-    }, 5000);
-    
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-    };
   }, [ticketId]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
+    if (messagesEndRef.current && messages.length > lastMessageCountRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      lastMessageCountRef.current = messages.length;
     }
   }, [messages]);
 
@@ -110,11 +100,9 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
           };
         });
         
-        const hasChanges = processedMessages.length !== messages.length ||
-          JSON.stringify(processedMessages.map(m => m.id)) !== 
-          JSON.stringify(messages.map(m => m.id));
-        
-        if (hasChanges) {
+        if (processedMessages.length !== messages.length || 
+            JSON.stringify(processedMessages.map(m => m.id)) !== 
+            JSON.stringify(messages.map(m => m.id))) {
           setMessages(processedMessages);
         }
       }
@@ -211,9 +199,6 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       setSelectedImage(null);
       setImagePreview(null);
       
-      setTimeout(() => {
-        fetchMessages(true);
-      }, 500);
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));

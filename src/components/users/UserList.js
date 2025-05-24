@@ -180,7 +180,6 @@ const UserList = () => {
         </Table>
       </TableContainer>
 
-      {/* User edit dialog */}
       <UserEditForm 
         open={openEditDialog}
         onClose={handleCloseEditDialog}
@@ -188,7 +187,6 @@ const UserList = () => {
         onSuccess={handleEditSuccess}
       />
 
-      {/* Delete confirmation dialog */}
       <Dialog
         open={openDeleteDialog}
         onClose={handleCloseDeleteDialog}
@@ -211,7 +209,6 @@ const UserList = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Status change confirmation dialog */}
       <Dialog
         open={openStatusDialog}
         onClose={handleCloseStatusDialog}
@@ -234,7 +231,6 @@ const UserList = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Success/error snackbar */}
       <Snackbar 
         open={!!successMessage || !!error} 
         autoHideDuration={6000} 

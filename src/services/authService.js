@@ -12,6 +12,7 @@ const parseJwt = (token) => {
     );
     return JSON.parse(jsonPayload);
   } catch (e) {
+    console.error('Error parsing JWT:', e);
     return null;
   }
 };
@@ -54,9 +55,21 @@ export const authService = {
         message: 'Invalid authentication response'
       };
     } catch (error) {
+      let errorMessage = 'Authentication failed';
+      
+      if (error.response) {
+        if (error.response.status === 401) {
+          errorMessage = error.response.data?.error || 'Usuário ou senha inválidos';
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data?.error) {
+          errorMessage = error.response.data.error;
+        }
+      }
+      
       return {
         success: false,
-        message: error.message || 'Authentication failed'
+        message: errorMessage
       };
     }
   },
@@ -66,6 +79,7 @@ export const authService = {
       const response = await api.post('/logout', { sessionId });
       return response.data;
     } catch (error) {
+      console.error('Erro no logout:', error);
       return { success: false, message: 'Erro ao fazer logout' };
     }
   },

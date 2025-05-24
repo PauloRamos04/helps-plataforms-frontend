@@ -19,12 +19,11 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // If already authenticated, redirect to dashboard
   useEffect(() => {
-    if (auth.isAuthenticated) {
+    if (auth.isAuthenticated && !loading && !loginError) {
       navigate('/dashboard');
     }
-  }, [auth.isAuthenticated, navigate]);
+  }, [auth.isAuthenticated, navigate, loginError, loading]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -33,24 +32,25 @@ function Login() {
       [name]: value
     }));
 
-    // Clear the error for this field when the user changes it
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
         [name]: ''
       }));
     }
+
+    if (loginError) {
+      setLoginError('');
+    }
   };
 
   const validate = () => {
     const newErrors = {};
 
-    // Username validation
     const usernameError = validateRequired(formData.username, 'Nome de usuário') ||
       validateUsername(formData.username);
     if (usernameError) newErrors.username = usernameError;
 
-    // Password validation
     const passwordError = validateRequired(formData.password, 'Senha');
     if (passwordError) newErrors.password = passwordError;
 
@@ -60,6 +60,7 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
     setLoginError('');
 
     if (!validate()) {
@@ -72,7 +73,11 @@ function Login() {
       const result = await login(formData);
 
       if (result.success) {
-        navigate('/dashboard');
+        setTimeout(() => {
+          if (!loginError) {
+            navigate('/dashboard');
+          }
+        }, 200);
       } else {
         setLoginError(result.message || 'Credenciais inválidas');
       }
@@ -118,7 +123,6 @@ function Login() {
           }
         }}
       >
-        {/* Logo */}
         <Box
           sx={{
             mb: 4,
@@ -139,7 +143,6 @@ function Login() {
           />
         </Box>
 
-        {/* Title */}
         <Box sx={{ mb: 4, textAlign: 'center' }}>
           <Typography
             variant="h4"
@@ -171,7 +174,6 @@ function Login() {
           </Typography>
         </Box>
 
-        {/* Login Form */}
         <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
           {loginError && (
             <Alert
@@ -188,7 +190,6 @@ function Login() {
             </Alert>
           )}
 
-          {/* Username field */}
           <TextField
             fullWidth
             placeholder="Username"
@@ -198,6 +199,7 @@ function Login() {
             variant="outlined"
             error={!!errors.username}
             helperText={errors.username}
+            disabled={loading}
             sx={{
               mb: 3,
               '& .MuiOutlinedInput-root': {
@@ -214,7 +216,6 @@ function Login() {
             }}
           />
 
-          {/* Password field */}
           <TextField
             fullWidth
             placeholder="Senha"
@@ -225,6 +226,7 @@ function Login() {
             variant="outlined"
             error={!!errors.password}
             helperText={errors.password}
+            disabled={loading}
             sx={{
               mb: 4,
               '& .MuiOutlinedInput-root': {
@@ -241,7 +243,6 @@ function Login() {
             }}
           />
 
-          {/* Login button */}
           <Button
             type="submit"
             fullWidth
@@ -259,6 +260,11 @@ function Login() {
               '&:hover': {
                 boxShadow: '0 6px 16px rgba(73, 102, 242, 0.4)',
                 transform: 'translateY(-2px)'
+              },
+              '&:disabled': {
+                background: '#ccc',
+                transform: 'none',
+                boxShadow: 'none'
               }
             }}
           >
