@@ -1,8 +1,8 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { 
   Box, Container, Typography, Grid, Paper, Card, CardContent, 
-  List, ListItem, ListItemText, Divider, CircularProgress,
-  Link, Button
+  CircularProgress, List, ListItem, ListItemText,
+  Divider, Button
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
@@ -26,6 +26,8 @@ function Dashboard() {
 
   const isHelper = auth.user?.roles?.includes('HELPER') || 
                    auth.user?.roles?.includes('ROLE_HELPER');
+  const isAdmin = auth.user?.roles?.includes('ADMIN') || 
+                  auth.user?.roles?.includes('ROLE_ADMIN');
 
   useEffect(() => {
     fetchTickets();
@@ -37,12 +39,10 @@ function Dashboard() {
       setError(null);
       const data = await ticketService.getChamados();
       
-      // Verificar se a resposta tem estrutura de ApiResponse
       const ticketsData = Array.isArray(data) ? data : (data?.data || []);
       
       setTickets(ticketsData);
       
-      // Calculate stats
       const stats = {
         total: ticketsData.length,
         open: ticketsData.filter(t => t.status === 'ABERTO').length,
@@ -58,7 +58,6 @@ function Dashboard() {
     }
   };
 
-  // Função para obter dados compatíveis do ticket
   const getTicketData = (ticket) => ({
     id: ticket.id,
     title: ticket.title || ticket.titulo,
@@ -71,18 +70,18 @@ function Dashboard() {
       <PageHeader 
         title="Dashboard"
         actionButton={
-          <Link component={RouterLink} to="/tickets/new" underline="none">
-            <Button
-              variant="contained"
-              sx={{
-                bgcolor: '#4966f2',
-                borderRadius: '4px',
-                textTransform: 'none'
-              }}
-            >
-              Novo Chamado
-            </Button>
-          </Link>
+          <Button
+            component={RouterLink}
+            to="/tickets/new"
+            variant="contained"
+            sx={{
+              bgcolor: '#4966f2',
+              borderRadius: '4px',
+              textTransform: 'none'
+            }}
+          >
+            Novo Chamado
+          </Button>
         }
       />
       
@@ -95,7 +94,6 @@ function Dashboard() {
       ) : (
         <>
           <Grid container spacing={3}>
-            {/* Stat cards */}
             <Grid item xs={12} sm={6} md={3}>
               <Paper
                 sx={{
@@ -169,7 +167,6 @@ function Dashboard() {
               </Paper>
             </Grid>
             
-            {/* Recent tickets */}
             <Grid item xs={12}>
               <Card>
                 <CardContent>
@@ -216,7 +213,6 @@ function Dashboard() {
               </Card>
             </Grid>
             
-            {/* Helper-specific content */}
             {isHelper && (
               <Grid item xs={12}>
                 <Card>

@@ -14,7 +14,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "recharts": "^2.10.3",
+    "recharts": "^2.15.3",
     "sockjs-client": "^1.6.1",
     "web-vitals": "^4.2.4",
     "webstomp-client": "^1.2.6"

@@ -10,6 +10,7 @@ import ListIcon from '@mui/icons-material/List';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import SearchIcon from '@mui/icons-material/Search';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AuthContext from '../../context/AuthContext';
 import alaresLogo from '../../assets/alares.png';
@@ -152,6 +153,14 @@ function Sidebar() {
               icon={<AssessmentIcon fontSize="small" />}
             >
               Logs de Atividade
+            </MenuItem>
+
+            <MenuItem 
+              to="/admin/audit" 
+              active={pathname === '/admin/audit'}
+              icon={<SearchIcon fontSize="small" />}
+            >
+              Auditoria
             </MenuItem>
           </>
         )}
