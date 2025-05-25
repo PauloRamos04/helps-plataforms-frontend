@@ -184,7 +184,7 @@ export const ticketService = {
   // Obter mensagens de um chamado
   getTicketMessages: async (ticketId) => {
     try {
-      const response = await api.get(`/tickets/${ticketId}/mensagens`);
+      const response = await api.get(`/tickets/${ticketId}/mensagens/chat-history`);
       return response.data;
     } catch (error) {
       console.error('Erro ao buscar mensagens do chamado:', error);
