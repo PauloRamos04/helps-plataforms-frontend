@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import AuthContext from './AuthContext';
 import notificationWebSocketService from '../services/notificationWebSocketService';
 import api from '../api';
@@ -11,9 +11,16 @@ export const NotificationsProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  
+  const authRef = useRef(auth);
+  const setupInProgress = useRef(false);
+  const reconnectTimer = useRef(null);
+  const fetchTimer = useRef(null);
 
-  const fetchNotifications = async () => {
-    if (!auth.isAuthenticated) return;
+  authRef.current = auth;
+
+  const fetchNotifications = useCallback(async () => {
+    if (!authRef.current?.isAuthenticated || loading) return;
     
     setLoading(true);
     try {
@@ -31,9 +38,9 @@ export const NotificationsProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const markAsRead = async (notificationId) => {
+  const markAsRead = useCallback(async (notificationId) => {
     try {
       await api.patch(`/notifications/${notificationId}/read`);
       
@@ -43,13 +50,13 @@ export const NotificationsProvider = ({ children }) => {
         )
       );
       
-      updateUnreadCount();
+      setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Erro ao marcar como lida:', error);
+      console.error('Erro ao marcar notificação como lida:', error);
     }
-  };
+  }, []);
 
-  const markAllAsRead = async () => {
+  const markAllAsRead = useCallback(async () => {
     try {
       await api.patch('/notifications/mark-all-read');
       
@@ -61,99 +68,38 @@ export const NotificationsProvider = ({ children }) => {
     } catch (error) {
       console.error('Erro ao marcar todas como lidas:', error);
     }
-  };
+  }, []);
 
-  const clearAllNotifications = () => {
-    setNotifications([]);
-    setUnreadCount(0);
-  };
-
-  const updateUnreadCount = () => {
-    const count = notifications.filter(n => !n.read).length;
-    setUnreadCount(count);
-  };
-
-  const addNotification = (notification) => {
+  const addNotification = useCallback((notification) => {
     if (!notification) return;
     
     setNotifications(prev => {
       const exists = prev.some(n => n.id === notification.id);
       if (exists) return prev;
       
-      const newNotifications = [notification, ...prev];
+      const newNotifications = [notification, ...prev].slice(0, 50);
       
       if (!notification.read) {
         setUnreadCount(prevCount => prevCount + 1);
-        playNotificationSound();
       }
       
-      return newNotifications.slice(0, 50);
+      return newNotifications;
     });
-  };
+  }, []);
 
-  const playNotificationSound = () => {
-    try {
-      const audio = new Audio('/notification-sound.mp3');
-      audio.volume = 0.3;
-      audio.play().catch(() => {
-        console.log('Som de notificação não pôde ser reproduzido');
-      });
-    } catch (error) {
-      console.log('Erro ao reproduzir som:', error);
+  const handleNewNotification = useCallback((notification) => {
+    if (!notification || !authRef.current?.user) return;
+    
+    const shouldReceive = checkIfShouldReceiveNotification(notification);
+    if (shouldReceive) {
+      addNotification(notification);
     }
-  };
+  }, [addNotification]);
 
-  const handleNewNotification = (notification) => {
-    if (!notification) return;
+  const checkIfShouldReceiveNotification = useCallback((notification) => {
+    if (!authRef.current?.user || !notification) return false;
     
-    const shouldReceiveNotification = checkIfShouldReceiveNotification(notification);
-    
-    if (!shouldReceiveNotification) {
-      return;
-    }
-    
-    addNotification(notification);
-    showBrowserNotification(notification);
-  };
-
-  const showBrowserNotification = (notification) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const browserNotification = new Notification(notification.message, {
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
-        tag: `notification-${notification.id}`,
-        renotify: false,
-        requireInteraction: false,
-        silent: false
-      });
-
-      setTimeout(() => {
-        browserNotification.close();
-      }, 5000);
-
-      browserNotification.onclick = () => {
-        if (notification.ticketId || notification.chamadoId) {
-          window.focus();
-          window.location.href = `/tickets/${notification.ticketId || notification.chamadoId}`;
-        }
-        browserNotification.close();
-      };
-    }
-  };
-
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
-    }
-    return Notification.permission === 'granted';
-  };
-
-  const checkIfShouldReceiveNotification = (notification) => {
-    if (!auth.user || !notification) return false;
-    
-    const userRoles = auth.user.roles || [];
-    
+    const userRoles = authRef.current.user.roles || [];
     const isAdminOrHelper = userRoles.some(role => 
       role === 'ADMIN' || role === 'HELPER' || 
       role === 'ROLE_ADMIN' || role === 'ROLE_HELPER'
@@ -163,63 +109,60 @@ export const NotificationsProvider = ({ children }) => {
       case 'NEW_TICKET':
       case 'NOVO_CHAMADO':
         return isAdminOrHelper;
-        
-      case 'NEW_MESSAGE':
-      case 'NOVA_MENSAGEM':
-        return true;
-        
-      case 'TICKET_ASSIGNED':
-      case 'CHAMADO_EM_ATENDIMENTO':
-      case 'TICKET_EM_ATENDIMENTO':
-        return true;
-        
-      case 'TICKET_CLOSED':
-      case 'CHAMADO_FECHADO':
-      case 'TICKET_FECHADO':
-        return true;
-        
-      case 'TEST':
-        return true;
-        
-      case 'USER_CREATED':
-      case 'USER_DELETED':
-      case 'USER_UPDATED':
-        return isAdminOrHelper;
-        
       default:
         return true;
     }
-  };
+  }, []);
 
-  const setupWebSocket = () => {
-    if (!auth.isAuthenticated || !auth.user) {
-      setWsConnected(false);
+  const setupWebSocket = useCallback(() => {
+    if (!authRef.current?.isAuthenticated || !authRef.current?.user || setupInProgress.current) {
       return;
     }
     
-    notificationWebSocketService.connect(
-      () => {
-        setWsConnected(true);
-        
-        const userId = auth.user.id;
-        const username = auth.user.username;
-        
-        if (userId && username) {
-          notificationWebSocketService.subscribeToUserNotifications(userId, username);
-          notificationWebSocketService.addNotificationCallback(handleNewNotification);
+    setupInProgress.current = true;
+    
+    const connectWebSocket = () => {
+      notificationWebSocketService.connect(
+        () => {
+          setWsConnected(true);
+          setupInProgress.current = false;
+          
+          const userId = authRef.current.user.id;
+          const username = authRef.current.user.username;
+          
+          if (userId && username) {
+            notificationWebSocketService.subscribeToUserNotifications(userId, username);
+            notificationWebSocketService.addNotificationCallback(handleNewNotification);
+          }
+          
+          notificationWebSocketService.subscribeToGlobalNotifications();
+          
+          if (reconnectTimer.current) {
+            clearTimeout(reconnectTimer.current);
+            reconnectTimer.current = null;
+          }
+        },
+        (error) => {
+          console.error('Erro WebSocket:', error);
+          setWsConnected(false);
+          setupInProgress.current = false;
+          
+          if (authRef.current?.isAuthenticated && !reconnectTimer.current) {
+            reconnectTimer.current = setTimeout(() => {
+              reconnectTimer.current = null;
+              if (authRef.current?.isAuthenticated) {
+                setupWebSocket();
+              }
+            }, 5000);
+          }
         }
-        
-        notificationWebSocketService.subscribeToGlobalNotifications();
-        requestNotificationPermission();
-      },
-      (error) => {
-        console.error('Erro WebSocket:', error);
-        setWsConnected(false);
-      }
-    );
-  };
+      );
+    };
 
-  const addDummyNotification = () => {
+    connectWebSocket();
+  }, [handleNewNotification]);
+
+  const addDummyNotification = useCallback(() => {
     const dummyNotification = {
       id: `dummy-${Date.now()}`,
       message: 'Esta é uma notificação de teste',
@@ -230,36 +173,45 @@ export const NotificationsProvider = ({ children }) => {
     };
     
     addNotification(dummyNotification);
-  };
+  }, [addNotification]);
 
-  useEffect(() => {
-    if (auth.isAuthenticated && auth.user) {
-      fetchNotifications();
-      setupWebSocket();
-      
-      const interval = setInterval(() => {
-        if (!wsConnected) {
-          fetchNotifications();
-        }
-      }, 60000);
-      
-      return () => {
-        clearInterval(interval);
-        notificationWebSocketService.removeNotificationCallback(handleNewNotification);
-        notificationWebSocketService.disconnect();
-        setWsConnected(false);
-      };
-    } else {
-      setNotifications([]);
-      setUnreadCount(0);
-      setWsConnected(false);
-      notificationWebSocketService.disconnect();
+  const cleanup = useCallback(() => {
+    setupInProgress.current = false;
+    setNotifications([]);
+    setUnreadCount(0);
+    setWsConnected(false);
+    
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
     }
-  }, [auth.isAuthenticated, auth.user?.id]);
+    
+    if (fetchTimer.current) {
+      clearInterval(fetchTimer.current);
+      fetchTimer.current = null;
+    }
+    
+    notificationWebSocketService.removeNotificationCallback(handleNewNotification);
+    notificationWebSocketService.disconnect();
+  }, [handleNewNotification]);
 
   useEffect(() => {
-    updateUnreadCount();
-  }, [notifications]);
+    if (!auth?.isAuthenticated || !auth?.user?.id) {
+      cleanup();
+      return;
+    }
+
+    fetchNotifications();
+    setupWebSocket();
+    
+    fetchTimer.current = setInterval(() => {
+      if (!wsConnected && authRef.current?.isAuthenticated) {
+        fetchNotifications();
+      }
+    }, 60000);
+
+    return cleanup;
+  }, [auth?.isAuthenticated, auth?.user?.id]);
 
   const contextValue = {
     notifications,
@@ -268,11 +220,9 @@ export const NotificationsProvider = ({ children }) => {
     wsConnected,
     markAsRead,
     markAllAsRead,
-    clearAllNotifications,
     refreshNotifications: fetchNotifications,
     addNotification,
-    addDummyNotification,
-    requestNotificationPermission
+    addDummyNotification
   };
 
   return (
@@ -280,34 +230,6 @@ export const NotificationsProvider = ({ children }) => {
       {children}
     </NotificationsContext.Provider>
   );
-};
-
-const playNotificationSound = () => {
-  try {
-    // Versão com arquivo
-    const audio = new Audio('/notification-sound.mp3');
-    audio.volume = 0.3;
-    audio.play().catch(() => {});
-  } catch (error) {
-    // Fallback: Web Audio API para gerar som
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-      
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.2);
-    } catch (webAudioError) {
-      console.log('Som não pôde ser reproduzido');
-    }
-  }
 };
 
 export default NotificationsContext;

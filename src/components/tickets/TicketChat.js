@@ -23,8 +23,17 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
   const lastMessageCountRef = useRef(0);
   const wsConnectedRef = useRef(false);
+  
+  const focusInput = () => {
+    setTimeout(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.focus();
+      }
+    }, 100);
+  };
   
   const getCurrentUserIdentifier = () => {
     const token = localStorage.getItem('token');
@@ -130,6 +139,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     
     fetchMessages();
     setupWebSocket();
+    focusInput();
 
     return () => {
       if (wsConnectedRef.current) {
@@ -278,6 +288,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       });
     } finally {
       setIsSending(false);
+      focusInput();
     }
   };
 
@@ -317,6 +328,8 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       setImagePreview(reader.result);
     };
     reader.readAsDataURL(file);
+    
+    focusInput();
   };
 
   const handleRemoveImage = () => {
@@ -325,6 +338,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    focusInput();
   };
 
   const handleCloseNotification = () => {
@@ -669,6 +683,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
             disabled={isChatDisabled || isSending}
             variant="outlined"
             size="small"
+            inputRef={messageInputRef}
             sx={{
               '& .MuiOutlinedInput-root': {
                 bgcolor: 'white',
