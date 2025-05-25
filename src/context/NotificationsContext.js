@@ -27,8 +27,7 @@ export const NotificationsProvider = ({ children }) => {
         setUnreadCount(notificationsData.filter(n => !n.read).length);
       }
     } catch (error) {
-      // Silenciar erro - apenas retornar
-      return error;
+      console.error('Erro ao buscar notificações:', error);
     } finally {
       setLoading(false);
     }
@@ -46,7 +45,7 @@ export const NotificationsProvider = ({ children }) => {
       
       updateUnreadCount();
     } catch (error) {
-      // Silenciar erro
+      console.error('Erro ao marcar como lida:', error);
     }
   };
 
@@ -60,8 +59,13 @@ export const NotificationsProvider = ({ children }) => {
       
       setUnreadCount(0);
     } catch (error) {
-      // Silenciar erro
+      console.error('Erro ao marcar todas como lidas:', error);
     }
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+    setUnreadCount(0);
   };
 
   const updateUnreadCount = () => {
@@ -80,10 +84,23 @@ export const NotificationsProvider = ({ children }) => {
       
       if (!notification.read) {
         setUnreadCount(prevCount => prevCount + 1);
+        playNotificationSound();
       }
       
       return newNotifications.slice(0, 50);
     });
+  };
+
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio('/notification-sound.mp3');
+      audio.volume = 0.3;
+      audio.play().catch(() => {
+        console.log('Som de notificação não pôde ser reproduzido');
+      });
+    } catch (error) {
+      console.log('Erro ao reproduzir som:', error);
+    }
   };
 
   const handleNewNotification = (notification) => {
@@ -96,6 +113,40 @@ export const NotificationsProvider = ({ children }) => {
     }
     
     addNotification(notification);
+    showBrowserNotification(notification);
+  };
+
+  const showBrowserNotification = (notification) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const browserNotification = new Notification(notification.message, {
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: `notification-${notification.id}`,
+        renotify: false,
+        requireInteraction: false,
+        silent: false
+      });
+
+      setTimeout(() => {
+        browserNotification.close();
+      }, 5000);
+
+      browserNotification.onclick = () => {
+        if (notification.ticketId || notification.chamadoId) {
+          window.focus();
+          window.location.href = `/tickets/${notification.ticketId || notification.chamadoId}`;
+        }
+        browserNotification.close();
+      };
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    }
+    return Notification.permission === 'granted';
   };
 
   const checkIfShouldReceiveNotification = (notification) => {
@@ -130,6 +181,11 @@ export const NotificationsProvider = ({ children }) => {
       case 'TEST':
         return true;
         
+      case 'USER_CREATED':
+      case 'USER_DELETED':
+      case 'USER_UPDATED':
+        return isAdminOrHelper;
+        
       default:
         return true;
     }
@@ -154,8 +210,10 @@ export const NotificationsProvider = ({ children }) => {
         }
         
         notificationWebSocketService.subscribeToGlobalNotifications();
+        requestNotificationPermission();
       },
       (error) => {
+        console.error('Erro WebSocket:', error);
         setWsConnected(false);
       }
     );
@@ -210,9 +268,11 @@ export const NotificationsProvider = ({ children }) => {
     wsConnected,
     markAsRead,
     markAllAsRead,
+    clearAllNotifications,
     refreshNotifications: fetchNotifications,
     addNotification,
-    addDummyNotification
+    addDummyNotification,
+    requestNotificationPermission
   };
 
   return (
@@ -220,6 +280,34 @@ export const NotificationsProvider = ({ children }) => {
       {children}
     </NotificationsContext.Provider>
   );
+};
+
+const playNotificationSound = () => {
+  try {
+    // Versão com arquivo
+    const audio = new Audio('/notification-sound.mp3');
+    audio.volume = 0.3;
+    audio.play().catch(() => {});
+  } catch (error) {
+    // Fallback: Web Audio API para gerar som
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+      
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.2);
+    } catch (webAudioError) {
+      console.log('Som não pôde ser reproduzido');
+    }
+  }
 };
 
 export default NotificationsContext;

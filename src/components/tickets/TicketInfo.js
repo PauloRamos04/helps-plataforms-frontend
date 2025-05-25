@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { 
   Box, Typography, Button, Divider, CircularProgress,
   Paper, Chip, Tooltip, Dialog, DialogContent, DialogTitle,
@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import AuthContext from '../../context/AuthContext';
 import ticketService from '../../services/ticketService';  
+import notificationWebSocketService from '../../services/notificationWebSocketService';
 import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
 
 const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
@@ -15,15 +16,48 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
   const [actionInProgress, setActionInProgress] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [confirmCloseDialog, setConfirmCloseDialog] = useState(false);
+  const [currentTicket, setCurrentTicket] = useState(ticket);
+  
+  useEffect(() => {
+    setCurrentTicket(ticket);
+  }, [ticket]);
+
+  useEffect(() => {
+    if (!currentTicket?.id) return;
+
+    const handleTicketUpdate = (wsMessage) => {
+      if (wsMessage.type === 'STATUS' && wsMessage.ticketId === currentTicket.id) {
+        setTimeout(() => {
+          if (onRefresh) onRefresh();
+        }, 500);
+      }
+    };
+
+    notificationWebSocketService.connect(
+      () => {
+        notificationWebSocketService.subscribe(
+          `/topic/ticket/${currentTicket.id}`, 
+          handleTicketUpdate
+        );
+      },
+      (error) => {
+        console.error('Erro WebSocket ticket info:', error);
+      }
+    );
+
+    return () => {
+      notificationWebSocketService.unsubscribe(`/topic/ticket/${currentTicket.id}`);
+    };
+  }, [currentTicket?.id, onRefresh]);
   
   const handleAderir = async () => {
     try {
       setActionInProgress(true);
       try {
-        await ticketService.assignTicket(ticket.id);
+        await ticketService.assignTicket(currentTicket.id);
       } catch (error) {
         if (error.response && error.response.status === 404) {
-          await ticketService.assignTicketLegacy(ticket.id);
+          await ticketService.assignTicketLegacy(currentTicket.id);
         } else {
           throw error;
         }
@@ -50,10 +84,10 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
       setConfirmCloseDialog(false);
       
       try {
-        await ticketService.closeTicket(ticket.id);
+        await ticketService.closeTicket(currentTicket.id);
       } catch (error) {
         if (error.response && error.response.status === 404) {
-          await ticketService.closeTicketLegacy(ticket.id);
+          await ticketService.closeTicketLegacy(currentTicket.id);
         } else {
           throw error;
         }
@@ -109,11 +143,15 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
       role === 'ROLE_ADMIN'
     );
   };
-  
-  if (!ticket) return null;
 
-  const statusColor = getStatusColor(ticket.status);
-  const imageUrl = ticket.imagePath ? ticketService.getImageUrl(ticket.imagePath) : null;
+  const isCurrentUserHelper = () => {
+    return currentTicket?.helper?.id === auth?.user?.id;
+  };
+  
+  if (!currentTicket) return null;
+
+  const statusColor = getStatusColor(currentTicket.status);
+  const imageUrl = currentTicket.imagePath ? ticketService.getImageUrl(currentTicket.imagePath) : null;
 
   return (
     <>
@@ -129,9 +167,21 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
         }}
       >
         <Box>
-          <Typography variant="h6" component="h2" sx={{ mb: 2, fontWeight: 'medium' }}>
-            Descrição do Chamado
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" component="h2" sx={{ fontWeight: 'medium' }}>
+              Descrição do Chamado
+            </Typography>
+            <Chip
+              label={currentTicket.status?.replace('_', ' ') || 'ABERTO'}
+              sx={{
+                bgcolor: statusColor.bg,
+                color: statusColor.color,
+                fontWeight: 'medium',
+                fontSize: '12px'
+              }}
+              size="small"
+            />
+          </Box>
           
           <Typography 
             variant="body1" 
@@ -143,7 +193,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
               lineHeight: 1.6
             }}
           >
-            {ticket.description}
+            {currentTicket.description}
           </Typography>
           
           {imageUrl && (
@@ -207,7 +257,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
               Atendente Designado
             </Typography>
             
-            {ticket.helper ? (
+            {currentTicket.helper ? (
               <Box sx={{ mb: 2 }}>
                 <Box 
                   sx={{ 
@@ -218,10 +268,10 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
                   }}
                 >
                   <Typography variant="body1" sx={{ fontWeight: 'medium', mb: 0.5 }}>
-                    {ticket.helper.name || ticket.helper.username}
+                    {currentTicket.helper.name || currentTicket.helper.username}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {ticket.startDate ? `Atendendo desde ${formatDate(ticket.startDate)}` : ''}
+                    {currentTicket.startDate ? `Atendendo desde ${formatDate(currentTicket.startDate)}` : ''}
                   </Typography>
                 </Box>
               </Box>
@@ -251,7 +301,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
                   Ações
                 </Typography>
                 
-                {isHelperOrAdmin() && ticket.status === 'ABERTO' && (
+                {isHelperOrAdmin() && currentTicket.status === 'ABERTO' && (
                   <Button
                     fullWidth
                     variant="contained"
@@ -269,7 +319,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
                   </Button>
                 )}
 
-                {isHelperOrAdmin() && ticket.status === 'EM_ATENDIMENTO' && (
+                {(isHelperOrAdmin() || isCurrentUserHelper()) && currentTicket.status === 'EM_ATENDIMENTO' && (
                   <Button
                     fullWidth
                     variant="contained"

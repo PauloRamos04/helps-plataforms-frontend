@@ -9,6 +9,7 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
 import AuthContext from '../../context/AuthContext';
 import ticketService from '../../services/ticketService';
+import notificationWebSocketService from '../../services/notificationWebSocketService';
 
 const TicketChat = ({ ticketId, ticketStatus }) => {
   const { auth } = useContext(AuthContext);
@@ -23,6 +24,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const lastMessageCountRef = useRef(0);
+  const wsConnectedRef = useRef(false);
   
   const getCurrentUserIdentifier = () => {
     const token = localStorage.getItem('token');
@@ -62,10 +64,79 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     return false;
   };
 
+  const handleNewWebSocketMessage = (wsMessage) => {
+    if (wsMessage.type === 'CHAT' && wsMessage.ticketId === parseInt(ticketId)) {
+      const currentUser = getCurrentUserIdentifier();
+      
+      if (wsMessage.senderId?.toString() === currentUser?.userId?.toString()) {
+        return;
+      }
+
+      const newMessage = {
+        id: Date.now() + Math.random(),
+        isOwnMessage: false,
+        senderId: wsMessage.senderId,
+        senderName: wsMessage.senderName,
+        senderUsername: wsMessage.senderName,
+        sender: {
+          id: wsMessage.senderId,
+          username: wsMessage.senderName,
+          name: wsMessage.senderName
+        },
+        content: wsMessage.content,
+        sentDate: wsMessage.timestamp || new Date().toISOString(),
+        _isWebSocket: true
+      };
+
+      setMessages(prev => {
+        const exists = prev.some(m => 
+          m.content === newMessage.content && 
+          m.senderId === newMessage.senderId &&
+          Math.abs(new Date(m.sentDate) - new Date(newMessage.sentDate)) < 5000
+        );
+        
+        if (exists) return prev;
+        
+        return [...prev, newMessage];
+      });
+    }
+  };
+
+  const setupWebSocket = () => {
+    if (!ticketId || wsConnectedRef.current) return;
+
+    notificationWebSocketService.connect(
+      () => {
+        wsConnectedRef.current = true;
+        
+        const success = notificationWebSocketService.subscribe(
+          `/topic/ticket/${ticketId}`, 
+          handleNewWebSocketMessage
+        );
+        
+        if (success) {
+          console.log(`WebSocket conectado ao chat do ticket ${ticketId}`);
+        }
+      },
+      (error) => {
+        console.error('Erro WebSocket no chat:', error);
+        wsConnectedRef.current = false;
+      }
+    );
+  };
+
   useEffect(() => {
     if (!ticketId) return;
     
     fetchMessages();
+    setupWebSocket();
+
+    return () => {
+      if (wsConnectedRef.current) {
+        notificationWebSocketService.unsubscribe(`/topic/ticket/${ticketId}`);
+        wsConnectedRef.current = false;
+      }
+    };
   }, [ticketId]);
 
   useEffect(() => {
@@ -100,11 +171,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
           };
         });
         
-        if (processedMessages.length !== messages.length || 
-            JSON.stringify(processedMessages.map(m => m.id)) !== 
-            JSON.stringify(messages.map(m => m.id))) {
-          setMessages(processedMessages);
-        }
+        setMessages(processedMessages);
       }
       
       if (error) {
@@ -312,6 +379,11 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       >
         <Typography variant="subtitle1" fontWeight="medium">
           Chat do Chamado #{ticketId}
+          {wsConnectedRef.current && (
+            <Box component="span" sx={{ ml: 1, color: '#4caf50', fontSize: '0.8rem' }}>
+              ● Online
+            </Box>
+          )}
         </Typography>
         
         <Tooltip title="Atualizar mensagens">
@@ -398,6 +470,22 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                         }}
                       >
                         {userRole}
+                      </Box>
+                    )}
+                    {message._isWebSocket && (
+                      <Box 
+                        component="span" 
+                        sx={{ 
+                          bgcolor: '#4caf50',
+                          color: 'white',
+                          fontSize: '0.6rem',
+                          px: 0.5,
+                          py: 0.2,
+                          borderRadius: '4px',
+                          ml: 0.5
+                        }}
+                      >
+                        ●
                       </Box>
                     )}
                   </Typography>

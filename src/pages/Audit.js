@@ -11,17 +11,20 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   Visibility as VisibilityIcon,
+  Launch as LaunchIcon,
   TrendingUp, TrendingDown, AccessTime, CheckCircle,
   Assignment, Timeline, Work, Schedule
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { userService } from '../services/userService';
 import { ticketService } from '../services/ticketService';
 import PageHeader from '../components/common/PageHeader';
 import ErrorHandler from '../components/common/ErrorHandler';
 import StatusBadge from '../components/tickets/StatusBadge';
-import { formatDate } from '../utils/dateUtils';
+import { formatDate, formatDateTime } from '../utils/dateUtils';
 
 function Audit() {
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -143,6 +146,10 @@ function Audit() {
     setUserMetrics(null);
   };
 
+  const handleTicketClick = (ticketId) => {
+    navigate(`/tickets/${ticketId}`);
+  };
+
   const getRoleColor = (role) => {
     if (role.includes('ADMIN')) {
       return { bg: '#d32f2f', color: 'white' };
@@ -161,6 +168,38 @@ function Audit() {
       totalActivity: metrics.createdTickets + metrics.handledTickets,
       performance: metrics.resolutionRate
     };
+  };
+
+  const calculateTicketDuration = (ticket) => {
+    if (ticket.status === 'FECHADO' && ticket.openingDate && ticket.closingDate) {
+      const start = new Date(ticket.openingDate);
+      const end = new Date(ticket.closingDate);
+      const hours = (end - start) / (1000 * 60 * 60);
+      
+      if (hours < 24) {
+        return `${hours.toFixed(1)}h`;
+      } else {
+        const days = Math.floor(hours / 24);
+        const remainingHours = Math.floor(hours % 24);
+        return `${days}d ${remainingHours}h`;
+      }
+    }
+    
+    if (ticket.status === 'EM_ATENDIMENTO' && ticket.openingDate) {
+      const start = new Date(ticket.openingDate);
+      const now = new Date();
+      const hours = (now - start) / (1000 * 60 * 60);
+      
+      if (hours < 24) {
+        return `${hours.toFixed(1)}h (em andamento)`;
+      } else {
+        const days = Math.floor(hours / 24);
+        const remainingHours = Math.floor(hours % 24);
+        return `${days}d ${remainingHours}h (em andamento)`;
+      }
+    }
+    
+    return '-';
   };
 
   const filteredUsers = users.filter(user => 
@@ -445,67 +484,83 @@ function Audit() {
                             <List sx={{ pt: 0 }}>
                               {userMetrics.allTickets.map((ticket) => (
                                 <React.Fragment key={ticket.id}>
-                                  <ListItem sx={{ px: 0, py: 1 }}>
+                                  <ListItem sx={{ px: 0, py: 1, cursor: 'pointer' }} onClick={() => handleTicketClick(ticket.id)}>
                                     <ListItemText
                                       primary={
                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                                            #{ticket.id} - {ticket.title || ticket.titulo}
-                                          </Typography>
+                                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                              #{ticket.id} - {ticket.title || ticket.titulo}
+                                            </Typography>
+                                            <IconButton size="small" sx={{ ml: 1 }}>
+                                              <LaunchIcon fontSize="small" />
+                                            </IconButton>
+                                          </Box>
                                           <StatusBadge status={ticket.status} />
                                         </Box>
                                       }
                                       secondary={
                                         <Box sx={{ mt: 1 }}>
-                                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                            Aberto: {formatDate(ticket.openingDate || ticket.dataAbertura)}
-                                          </Typography>
-                                          {ticket.startDate && (
-                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                              Iniciado: {formatDate(ticket.startDate)}
-                                            </Typography>
-                                          )}
-                                          {ticket.closingDate && (
-                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                              Finalizado: {formatDate(ticket.closingDate)}
-                                            </Typography>
-                                          )}
-                                          <Typography variant="caption" sx={{ 
-                                            display: 'inline-block',
-                                            mt: 0.5,
-                                            px: 1,
-                                            py: 0.25,
-                                            bgcolor: '#f5f5f5',
-                                            borderRadius: '4px'
-                                          }}>
-                                            {ticket.category || ticket.categoria || 'GERAL'}
-                                          </Typography>
-                                          {ticket.helper?.id === selectedUser.id && (
-                                            <Chip 
-                                              label="Helper" 
-                                              size="small" 
-                                              sx={{ 
-                                                ml: 1, 
-                                                bgcolor: '#e8f5e9', 
-                                                color: '#2e7d32',
-                                                height: '20px',
-                                                fontSize: '0.7rem'
-                                              }} 
-                                            />
-                                          )}
-                                          {(ticket.user?.id || ticket.usuario?.id) === selectedUser.id && (
-                                            <Chip 
-                                              label="Criador" 
-                                              size="small" 
-                                              sx={{ 
-                                                ml: 1, 
-                                                bgcolor: '#e3f2fd', 
-                                                color: '#1976d2',
-                                                height: '20px',
-                                                fontSize: '0.7rem'
-                                              }} 
-                                            />
-                                          )}
+                                          <Grid container spacing={2}>
+                                            <Grid item xs={12} sm={6}>
+                                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                <strong>Aberto:</strong> {formatDateTime(ticket.openingDate || ticket.dataAbertura)}
+                                              </Typography>
+                                              {ticket.startDate && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                  <strong>Iniciado:</strong> {formatDateTime(ticket.startDate)}
+                                                </Typography>
+                                              )}
+                                              {ticket.closingDate && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                  <strong>Finalizado:</strong> {formatDateTime(ticket.closingDate)}
+                                                </Typography>
+                                              )}
+                                            </Grid>
+                                            <Grid item xs={12} sm={6}>
+                                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                <strong>Duração:</strong> {calculateTicketDuration(ticket)}
+                                              </Typography>
+                                              <Typography variant="caption" sx={{ 
+                                                display: 'inline-block',
+                                                mt: 0.5,
+                                                px: 1,
+                                                py: 0.25,
+                                                bgcolor: '#f5f5f5',
+                                                borderRadius: '4px'
+                                              }}>
+                                                {ticket.category || ticket.categoria || 'GERAL'}
+                                              </Typography>
+                                            </Grid>
+                                          </Grid>
+                                          <Box sx={{ mt: 1 }}>
+                                            {ticket.helper?.id === selectedUser.id && (
+                                              <Chip 
+                                                label="Helper" 
+                                                size="small" 
+                                                sx={{ 
+                                                  mr: 1, 
+                                                  bgcolor: '#e8f5e9', 
+                                                  color: '#2e7d32',
+                                                  height: '20px',
+                                                  fontSize: '0.7rem'
+                                                }} 
+                                              />
+                                            )}
+                                            {(ticket.user?.id || ticket.usuario?.id) === selectedUser.id && (
+                                              <Chip 
+                                                label="Criador" 
+                                                size="small" 
+                                                sx={{ 
+                                                  mr: 1, 
+                                                  bgcolor: '#e3f2fd', 
+                                                  color: '#1976d2',
+                                                  height: '20px',
+                                                  fontSize: '0.7rem'
+                                                }} 
+                                              />
+                                            )}
+                                          </Box>
                                         </Box>
                                       }
                                     />
