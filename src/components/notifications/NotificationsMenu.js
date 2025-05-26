@@ -6,13 +6,11 @@ import {
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import ClearAllIcon from '@mui/icons-material/ClearAll';
 import InfoIcon from '@mui/icons-material/Info';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import MessageIcon from '@mui/icons-material/Message';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
 import NotificationsContext from '../../context/NotificationsContext';
 
@@ -26,8 +24,7 @@ const NotificationsMenu = () => {
     loading, 
     wsConnected,
     markAsRead, 
-    markAllAsRead,
-    clearAllNotifications,
+    markAllAsRead, 
     refreshNotifications,
     addDummyNotification
   } = useContext(NotificationsContext);
@@ -55,8 +52,9 @@ const NotificationsMenu = () => {
     }
   };
 
-  const handleClearAll = () => {
-    clearAllNotifications();
+  const handleClearAll = async () => {
+    await markAllAsRead();
+    handleCloseMenu();
   };
   
   const formatRelativeTime = (timestamp) => {
@@ -144,26 +142,14 @@ const NotificationsMenu = () => {
               }}
             />
             
-            {notifications.length > 0 && (
-              <Tooltip title="Limpar todas">
-                <IconButton 
-                  size="small" 
-                  onClick={handleClearAll}
-                  sx={{ color: '#f44336' }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-
             {unreadCount > 0 && (
               <Button 
                 size="small"
                 variant="text"
                 sx={{ color: '#4966f2', textTransform: 'none', minWidth: 'auto', p: 0.5 }}
-                onClick={markAllAsRead}
+                onClick={handleClearAll}
               >
-                Marcar lidas
+                Limpar
               </Button>
             )}
             
@@ -249,17 +235,6 @@ const NotificationsMenu = () => {
             <Typography variant="body2" color="textSecondary">
               Nenhuma notificação no momento
             </Typography>
-            
-            {process.env.NODE_ENV === 'development' && (
-              <Button 
-                size="small"
-                variant="outlined"
-                onClick={handleAddTestNotification}
-                sx={{ mt: 2, textTransform: 'none' }}
-              >
-                Adicionar Teste
-              </Button>
-            )}
           </Box>
         )}
       </Menu>

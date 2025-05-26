@@ -1,6 +1,6 @@
-const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
-const SESSION_KEY = 'auth_session';
+const TOKEN_KEY = 'token';
+const USER_KEY = 'user';
+const SESSION_KEY = 'sessionId';
 
 const tokenService = {
   setToken: (token) => {
@@ -92,10 +92,10 @@ const tokenService = {
     }
   },
 
-  setSessionId: (sessionId) => {
-    if (!sessionId) return false;
+  setSessionId: (session) => {
+    if (!session) return false;
     try {
-      localStorage.setItem(SESSION_KEY, sessionId);
+      localStorage.setItem(SESSION_KEY, session);
       return true;
     } catch (error) {
       console.error('Error storing session ID:', error);
