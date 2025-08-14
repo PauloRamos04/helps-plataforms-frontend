@@ -90,7 +90,6 @@ export const useChat = (ticketId, ticketStatus) => {
         setError(null);
       }
     } catch (err) {
-      console.error("Erro ao buscar mensagens:", err);
       setError('Não foi possível carregar as mensagens. Tente novamente.');
     } finally {
       setLoading(false);
@@ -186,7 +185,6 @@ export const useChat = (ticketId, ticketStatus) => {
         refreshMessages();
       }, 500);
     } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
       setMessageInput(currentMessage);
       

@@ -60,14 +60,24 @@ const NotificationsMenu = () => {
   const formatRelativeTime = (timestamp) => {
     if (!timestamp) return 'agora';
     
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMinutes = Math.floor((now - date) / (1000 * 60));
-    
-    if (diffMinutes < 1) return 'agora';
-    if (diffMinutes < 60) return `${diffMinutes}m atrás`;
-    if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h atrás`;
-    return `${Math.floor(diffMinutes / 1440)}d atrás`;
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+
+        return 'agora';
+      }
+      
+      const now = new Date();
+      const diffMinutes = Math.floor((now - date) / (1000 * 60));
+      
+      if (diffMinutes < 1) return 'agora';
+      if (diffMinutes < 60) return `${diffMinutes}m atrás`;
+      if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h atrás`;
+      return `${Math.floor(diffMinutes / 1440)}d atrás`;
+    } catch (error) {
+      
+      return 'agora';
+    }
   };
 
   const getNotificationIcon = (type) => {

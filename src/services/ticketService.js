@@ -7,7 +7,6 @@ export const ticketService = {
       const response = await api.get('/tickets');
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar chamados:', error);
       throw new Error('Não foi possível carregar os chamados');
     }
   },
@@ -26,7 +25,6 @@ export const ticketService = {
       const response = await api.get('/tickets/paginated', { params });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar chamados paginados:', error);
       throw new Error('Não foi possível carregar os chamados');
     }
   },
@@ -42,7 +40,6 @@ export const ticketService = {
       const response = await api.get(`/tickets/${id}`);
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao buscar detalhes do chamado:', error);
       throw new Error('Não foi possível carregar os detalhes do chamado');
     }
   },
@@ -58,7 +55,6 @@ export const ticketService = {
       const response = await api.post('/tickets', ticketData);
       return response.data;
     } catch (error) {
-      console.error('Erro ao criar chamado:', error);
       throw new Error('Não foi possível criar o chamado');
     }
   },
@@ -73,7 +69,6 @@ export const ticketService = {
       });
       return response.data;
     } catch (error) {
-      console.error('Erro ao criar chamado com imagem:', error);
       throw new Error('Não foi possível criar o chamado com imagem');
     }
   },
@@ -88,7 +83,6 @@ export const ticketService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao criar chamado:', error);
       throw new Error('Não foi possível criar o chamado');
     }
   },
@@ -115,7 +109,6 @@ export const ticketService = {
       const response = await api.post(`/tickets/${id}/assign`);
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao assumir chamado:', error);
       throw new Error('Não foi possível assumir o chamado');
     }
   },
@@ -126,7 +119,6 @@ export const ticketService = {
       const response = await api.post(`/tickets/${id}/aderir`);
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.error('Erro ao assumir chamado:', error);
       throw new Error('Não foi possível assumir o chamado');
     }
   },
@@ -137,7 +129,6 @@ export const ticketService = {
       const response = await api.post(`/tickets/${id}/close`);
       return response.data;
     } catch (error) {
-      console.error('Erro ao finalizar chamado:', error);
       throw new Error('Não foi possível finalizar o chamado');
     }
   },
@@ -148,7 +139,6 @@ export const ticketService = {
       const response = await api.post(`/tickets/${id}/fechar`);
       return response.data;
     } catch (error) {
-      console.error('Erro ao finalizar chamado:', error);
       throw new Error('Não foi possível finalizar o chamado');
     }
   },
@@ -159,7 +149,6 @@ export const ticketService = {
       const response = await api.put(`/tickets/${id}`, ticketData);
       return response.data;
     } catch (error) {
-      console.error('Erro ao atualizar chamado:', error);
       throw new Error('Não foi possível atualizar o chamado');
     }
   },
@@ -176,7 +165,6 @@ export const ticketService = {
         return response.data;
       }
     } catch (error) {
-      console.error('Erro ao atualizar status do chamado:', error);
       throw new Error('Não foi possível atualizar o status do chamado');
     }
   },
@@ -187,7 +175,6 @@ export const ticketService = {
       const response = await api.get(`/tickets/${ticketId}/mensagens/chat-history`);
       return response.data;
     } catch (error) {
-      console.error('Erro ao buscar mensagens do chamado:', error);
       throw new Error('Não foi possível carregar as mensagens do chamado');
     }
   },
@@ -207,10 +194,48 @@ export const ticketService = {
           : { content: messageData.message || messageData.texto || messageData.conteudo || messageData };
           
       const response = await api.post(`/tickets/${ticketId}/mensagens`, payload);
+      
+      // Verificar se a resposta é válida
+      if (!response || !response.data) {
+        throw new Error('Resposta inválida do servidor');
+      }
+      
       return response.data;
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      throw new Error('Não foi possível enviar a mensagem');
+      // Verificar se é um erro de rede
+      if (error.code === 'NETWORK_ERR' || error.message === 'Network Error') {
+        throw new Error('Erro de conexão. Verifique sua internet e tente novamente.');
+      }
+      
+      // Verificar se é um erro de timeout
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        throw new Error('Tempo limite excedido. Tente novamente.');
+      }
+      
+      // Verificar se é um erro do servidor
+      if (error.response && error.response.status >= 500) {
+        throw new Error('Erro interno do servidor. Tente novamente mais tarde.');
+      }
+      
+      // Verificar se é um erro de autenticação
+      if (error.response && error.response.status === 401) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+      
+      // Verificar se é um erro de permissão
+      if (error.response && error.response.status === 403) {
+        throw new Error('Você não tem permissão para enviar mensagens neste chamado.');
+      }
+      
+      // Verificar se é um erro de validação
+      if (error.response && error.response.status === 422) {
+        const message = error.response.data?.message || 'Dados inválidos. Verifique o conteúdo da mensagem.';
+        throw new Error(message);
+      }
+      
+      // Erro genérico
+      const message = error.message || 'Não foi possível enviar a mensagem';
+      throw new Error(message);
     }
   },
   
@@ -229,7 +254,6 @@ export const ticketService = {
       });
       return response.data;
     } catch (error) {
-      console.error('Erro ao enviar mensagem com imagem:', error);
       throw new Error('Não foi possível enviar a mensagem com imagem');
     }
   },

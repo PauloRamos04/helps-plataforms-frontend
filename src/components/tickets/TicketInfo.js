@@ -9,6 +9,7 @@ import AuthContext from '../../context/AuthContext';
 import ticketService from '../../services/ticketService';  
 import notificationWebSocketService from '../../services/notificationWebSocketService';
 import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
+import { formatDateTime } from '../../utils/dateUtils';
 
 const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
   const navigate = useNavigate();
@@ -41,7 +42,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
         );
       },
       (error) => {
-        console.error('Erro WebSocket ticket info:', error);
+        // Erro WebSocket ticket info
       }
     );
 
@@ -64,7 +65,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
       }
       if (onRefresh) onRefresh();
     } catch (error) {
-      console.error('Error assigning ticket:', error);
+      // Error assigning ticket
     } finally {
       setActionInProgress(false);
     }
@@ -94,7 +95,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
       }
       if (onRefresh) onRefresh();
     } catch (error) {
-      console.error('Error closing ticket:', error);
+      // Error closing ticket
     } finally {
       setActionInProgress(false);
     }
@@ -121,17 +122,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+
 
   const isHelperOrAdmin = () => {
     if (!auth || !auth.user || !auth.user.roles) return false;
@@ -271,7 +262,7 @@ const TicketInfo = ({ ticket, onRefresh, hideActions = false }) => {
                     {currentTicket.helper.name || currentTicket.helper.username}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {currentTicket.startDate ? `Atendendo desde ${formatDate(currentTicket.startDate)}` : ''}
+                    {currentTicket.startDate ? `Atendendo desde ${formatDateTime(currentTicket.startDate)}` : ''}
                   </Typography>
                 </Box>
               </Box>

@@ -19,12 +19,20 @@ class NotificationWebSocketService {
 
   connect(onConnected, onError) {
     if (this.connecting || this.isConnected) {
-      console.warn('WebSocket já está conectando ou conectado');
       return;
     }
 
     this.connecting = true;
     this.connectionState = 'CONNECTING';
+
+    // Timeout para evitar conexão infinita
+    const connectionTimeout = setTimeout(() => {
+      if (this.connecting) {
+        this.connecting = false;
+        this.connectionState = 'DISCONNECTED';
+        if (onError) onError(new Error('Timeout na conexão'));
+      }
+    }, 15000); // 15 segundos de timeout
 
     try {
       if (this.reconnectTimeout) {
@@ -34,6 +42,7 @@ class NotificationWebSocketService {
       
       const token = localStorage.getItem('token');
       if (!token) {
+        clearTimeout(connectionTimeout);
         this.connecting = false;
         this.connectionState = 'DISCONNECTED';
         if (onError) onError(new Error('Token não encontrado'));
@@ -65,6 +74,7 @@ class NotificationWebSocketService {
       this.stompClient.connect(
         connectHeaders,
         (frame) => {
+          clearTimeout(connectionTimeout);
           this.isConnected = true;
           this.connecting = false;
           this.connectionState = 'CONNECTED';
@@ -77,6 +87,7 @@ class NotificationWebSocketService {
           this._resubscribeAll();
         },
         (error) => {
+          clearTimeout(connectionTimeout);
           this.isConnected = false;
           this.connecting = false;
           this.connectionState = 'DISCONNECTED';
@@ -84,22 +95,25 @@ class NotificationWebSocketService {
           
           if (onError) onError(error);
           
-          this._scheduleReconnection(onConnected, onError);
+          // Não tentar reconectar automaticamente
+  
         }
       );
       
       socket.onclose = (event) => {
+        clearTimeout(connectionTimeout);
         this.isConnected = false;
         this.connecting = false;
         this._stopHeartbeat();
         
         if (this.connectionState === 'CONNECTED' && event.code !== 1000) {
           this.connectionState = 'DISCONNECTED';
-          this._scheduleReconnection(onConnected, onError);
+  
         }
       };
 
       socket.onerror = (error) => {
+        clearTimeout(connectionTimeout);
         this.isConnected = false;
         this.connecting = false;
         this.connectionState = 'DISCONNECTED';
@@ -107,6 +121,7 @@ class NotificationWebSocketService {
       };
       
     } catch (error) {
+      clearTimeout(connectionTimeout);
       this.connecting = false;
       this.connectionState = 'DISCONNECTED';
       if (onError) onError(error);
@@ -120,7 +135,7 @@ class NotificationWebSocketService {
         try {
           this.stompClient.send('/app/ping', '{}');
         } catch (error) {
-          console.warn('Erro no heartbeat:', error);
+          // Erro no heartbeat
         }
       }
     }, 25000);
@@ -134,8 +149,11 @@ class NotificationWebSocketService {
   }
   
   _scheduleReconnection(onConnected, onError) {
+    // Desabilitar reconexão automática para evitar loops infinitos
+    
+    return;
+    
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Máximo de tentativas de reconexão atingido');
       return;
     }
     
@@ -161,7 +179,7 @@ class NotificationWebSocketService {
         const { callback, headers } = metadata;
         this.subscribe(destination, callback, headers);
       } catch (error) {
-        console.error(`Erro ao restaurar assinatura para ${destination}:`, error);
+        // Erro ao restaurar assinatura
       }
     });
   }
@@ -177,10 +195,10 @@ class NotificationWebSocketService {
       
       try {
         this.stompClient.disconnect(() => {
-          console.log('Desconectado do WebSocket');
+  
         });
       } catch (error) {
-        console.error("Erro ao desconectar:", error);
+        // Erro ao desconectar
       }
       
       this.isConnected = false;
@@ -195,7 +213,6 @@ class NotificationWebSocketService {
   
   subscribe(destination, callback, headers = {}) {
     if (!this.isConnected || !this.stompClient) {
-      console.warn(`Não foi possível assinar ${destination}: WebSocket não conectado`);
       return false;
     }
     
@@ -207,9 +224,9 @@ class NotificationWebSocketService {
             if (callback) {
               callback(payload);
             }
-          } catch (error) {
-            console.error(`Erro ao processar mensagem de ${destination}:`, error);
-          }
+                  } catch (error) {
+          // Erro ao processar mensagem
+        }
         }, headers);
         
         this.subscriptions.set(destination, {
@@ -223,7 +240,6 @@ class NotificationWebSocketService {
       
       return true;
     } catch (error) {
-      console.error(`Erro ao assinar ${destination}:`, error);
       return false;
     }
   }
@@ -234,7 +250,7 @@ class NotificationWebSocketService {
       try {
         metadata.subscription.unsubscribe();
       } catch (error) {
-        console.error(`Erro ao cancelar assinatura para ${destination}:`, error);
+        // Erro ao cancelar assinatura
       }
       
       this.subscriptions.delete(destination);
@@ -259,9 +275,9 @@ class NotificationWebSocketService {
     this.notificationCallbacks.forEach(callback => {
       try {
         callback(notification);
-      } catch (error) {
-        console.error('Erro ao executar callback de notificação:', error);
-      }
+          } catch (error) {
+      // Erro ao executar callback de notificação
+    }
     });
   }
   

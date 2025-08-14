@@ -21,7 +21,7 @@ import { ticketService } from '../services/ticketService';
 import PageHeader from '../components/common/PageHeader';
 import ErrorHandler from '../components/common/ErrorHandler';
 import StatusBadge from '../components/tickets/StatusBadge';
-import { formatDate, formatDateTime } from '../utils/dateUtils';
+import { formatDate, formatDateTime, createValidDate } from '../utils/dateUtils';
 
 function Audit() {
   const navigate = useNavigate();
@@ -52,7 +52,7 @@ function Audit() {
       setUsers(Array.isArray(usersData) ? usersData : (usersData?.data || []));
       setTickets(Array.isArray(ticketsData) ? ticketsData : (ticketsData?.data || []));
     } catch (error) {
-      console.error('Error loading audit data:', error);
+      
       setError('Não foi possível carregar os dados de auditoria.');
     } finally {
       setLoading(false);
@@ -80,10 +80,17 @@ function Audit() {
         return tickets;
     }
 
-    return tickets.filter(ticket => {
-      const ticketDate = new Date(ticket.openingDate || ticket.dataAbertura);
-      return ticketDate >= cutoffDate;
-    });
+         return tickets.filter(ticket => {
+       try {
+         const ticketDate = createValidDate(ticket.openingDate || ticket.dataAbertura);
+         if (!ticketDate || isNaN(ticketDate.getTime())) {
+           return false;
+         }
+         return ticketDate >= cutoffDate;
+       } catch (error) {
+         return false;
+       }
+     });
   };
 
   const calculateUserMetrics = (userId) => {
@@ -97,22 +104,31 @@ function Audit() {
       t.helper?.id === userId
     );
     
-    const allUserTickets = [...userCreatedTickets, ...userHelperTickets]
-      .filter((ticket, index, self) => 
-        index === self.findIndex(t => t.id === ticket.id)
-      )
-      .sort((a, b) => new Date(b.openingDate || b.dataAbertura) - new Date(a.openingDate || a.dataAbertura));
+         const allUserTickets = [...userCreatedTickets, ...userHelperTickets]
+       .filter((ticket, index, self) => 
+         index === self.findIndex(t => t.id === ticket.id)
+       )
+       .sort((a, b) => {
+         const dateA = createValidDate(a.openingDate || a.dataAbertura);
+         const dateB = createValidDate(b.openingDate || b.dataAbertura);
+         if (!dateA || !dateB) return 0;
+         return dateB - dateA;
+       });
     
     const resolvedByUser = userHelperTickets.filter(t => t.status === 'FECHADO');
     const inProgressByUser = userHelperTickets.filter(t => t.status === 'EM_ATENDIMENTO');
     
-    const resolutionTimes = resolvedByUser
-      .filter(t => t.openingDate && t.closingDate)
-      .map(t => {
-        const start = new Date(t.openingDate);
-        const end = new Date(t.closingDate);
-        return (end - start) / (1000 * 60 * 60);
-      });
+         const resolutionTimes = resolvedByUser
+       .filter(t => t.openingDate && t.closingDate)
+       .map(t => {
+         const start = createValidDate(t.openingDate);
+         const end = createValidDate(t.closingDate);
+         if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+           return null;
+         }
+         return (end - start) / (1000 * 60 * 60);
+       })
+       .filter(time => time !== null);
 
     const averageResolutionTime = resolutionTimes.length > 0
       ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
@@ -170,37 +186,43 @@ function Audit() {
     };
   };
 
-  const calculateTicketDuration = (ticket) => {
-    if (ticket.status === 'FECHADO' && ticket.openingDate && ticket.closingDate) {
-      const start = new Date(ticket.openingDate);
-      const end = new Date(ticket.closingDate);
-      const hours = (end - start) / (1000 * 60 * 60);
-      
-      if (hours < 24) {
-        return `${hours.toFixed(1)}h`;
-      } else {
-        const days = Math.floor(hours / 24);
-        const remainingHours = Math.floor(hours % 24);
-        return `${days}d ${remainingHours}h`;
-      }
-    }
-    
-    if (ticket.status === 'EM_ATENDIMENTO' && ticket.openingDate) {
-      const start = new Date(ticket.openingDate);
-      const now = new Date();
-      const hours = (now - start) / (1000 * 60 * 60);
-      
-      if (hours < 24) {
-        return `${hours.toFixed(1)}h (em andamento)`;
-      } else {
-        const days = Math.floor(hours / 24);
-        const remainingHours = Math.floor(hours % 24);
-        return `${days}d ${remainingHours}h (em andamento)`;
-      }
-    }
-    
-    return '-';
-  };
+     const calculateTicketDuration = (ticket) => {
+     if (ticket.status === 'FECHADO' && ticket.openingDate && ticket.closingDate) {
+       const start = createValidDate(ticket.openingDate);
+       const end = createValidDate(ticket.closingDate);
+       if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+         return '-';
+       }
+       const hours = (end - start) / (1000 * 60 * 60);
+       
+       if (hours < 24) {
+         return `${hours.toFixed(1)}h`;
+       } else {
+         const days = Math.floor(hours / 24);
+         const remainingHours = Math.floor(hours % 24);
+         return `${days}d ${remainingHours}h`;
+       }
+     }
+     
+     if (ticket.status === 'EM_ATENDIMENTO' && ticket.openingDate) {
+       const start = createValidDate(ticket.openingDate);
+       if (!start || isNaN(start.getTime())) {
+         return '-';
+       }
+       const now = new Date();
+       const hours = (now - start) / (1000 * 60 * 60);
+       
+       if (hours < 24) {
+         return `${hours.toFixed(1)}h (em andamento)`;
+       } else {
+         const days = Math.floor(hours / 24);
+         const remainingHours = Math.floor(hours % 24);
+         return `${days}d ${remainingHours}h (em andamento)`;
+       }
+     }
+     
+     return '-';
+   };
 
   const filteredUsers = users.filter(user => 
     user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||

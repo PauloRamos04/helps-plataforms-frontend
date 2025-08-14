@@ -22,7 +22,6 @@ const useNotifications = () => {
                 setUnreadCount(data.filter(n => !n.read).length);
             }
         } catch (error) {
-            console.error('Erro ao carregar notificações:', error);
             // Em caso de erro da API, manter as notificações locais
         } finally {
             setLoading(false);
@@ -46,7 +45,7 @@ const useNotifications = () => {
 
             setUnreadCount(prev => Math.max(0, prev - 1));
         } catch (error) {
-            console.error('Erro ao marcar notificação como lida:', error);
+            // Erro ao marcar notificação como lida
         }
     }, []);
 
@@ -61,7 +60,7 @@ const useNotifications = () => {
 
             setUnreadCount(0);
         } catch (error) {
-            console.error('Erro ao marcar todas as notificações como lidas:', error);
+            // Erro ao marcar todas as notificações como lidas
         }
     }, []);
 
@@ -69,7 +68,7 @@ const useNotifications = () => {
     const handleNewNotification = useCallback((notification) => {
         if (!notification) return;
         
-        console.log('Nova notificação recebida:', notification);
+  
         
         // Verificar se já temos esta notificação
         setNotifications(prev => {
@@ -165,7 +164,7 @@ const useNotifications = () => {
             notificationWebSocketService.connect(
                 () => {
                     setWsConnected(true);
-                    console.log('WebSocket conectado - configurando notificações');
+            
                     
                     // Solicitar permissão para notificações do browser
                     requestNotificationPermission();
@@ -181,7 +180,7 @@ const useNotifications = () => {
                         );
                         
                         if (success) {
-                            console.log(`Notificações configuradas para ${username} (ID: ${userId})`);
+                    
                         }
                     }
                     
@@ -195,7 +194,6 @@ const useNotifications = () => {
                     loadNotifications();
                 },
                 (error) => {
-                    console.error('Erro na conexão WebSocket:', error);
                     setWsConnected(false);
                     
                     // Fallback: carregar notificações via polling

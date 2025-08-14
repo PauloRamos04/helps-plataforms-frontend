@@ -28,39 +28,21 @@ function TicketDetail() {
   const fetchTicket = async () => {
     try {
       setLoading(true);
-      setError(null);
-      
-      // Tenta buscar o chamado - verifica qual função está disponível
       const data = await ticketService.getTicketById(id);
-      
-      console.log("Dados do ticket recebidos:", data);
-      
-      // Verificação de segurança - importante para evitar tela em branco
-      if (!data) {
-        throw new Error('Dados do chamado não encontrados');
-      }
-      
       setTicket(data);
-    } catch (error) {
-      console.error("Erro ao carregar chamado:", error);
-      
-      // Mensagem de erro mais específica baseada no código de status
-      if (error.response && error.response.status) {
-        if (error.response.status === 404) {
-          setError('Chamado não encontrado. Verifique o ID e tente novamente.');
-        } else if (error.response.status === 500) {
-          setError('Erro no servidor. Por favor, tente novamente mais tarde.');
-        } else if (error.response.status === 401 || error.response.status === 403) {
-          setError('Você não tem permissão para acessar este chamado.');
-        } else {
-          setError(`Erro ao carregar os detalhes do chamado (${error.response.status}). Tente novamente.`);
-        }
-      } else {
-        setError('Não foi possível carregar os detalhes do chamado. Tente novamente.');
-      }
+      setError(null);
+    } catch (err) {
+      console.error('Erro ao buscar ticket:', err);
+      setError('Não foi possível carregar os detalhes do chamado.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Callback para quando o status do ticket mudar via WebSocket
+  const handleTicketStatusChange = (newStatus) => {
+
+    setTicket(prev => prev ? { ...prev, status: newStatus } : null);
   };
 
   const handleOpenImageDialog = () => {
@@ -140,6 +122,7 @@ function TicketDetail() {
               <TicketChat 
                 ticketId={parseInt(id)} 
                 ticketStatus={ticket.status || 'ABERTO'}
+                onTicketStatusChange={handleTicketStatusChange}
               />
             </Box>
 

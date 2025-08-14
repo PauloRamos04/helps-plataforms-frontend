@@ -39,6 +39,10 @@ const translateError = (error) => {
       case 429:
         return 'Muitas tentativas. Aguarde um momento antes de tentar novamente.';
       case 500:
+        // Para erros 500, verificar se é relacionado ao envio de mensagens
+        if (error.config?.url?.includes('/mensagens')) {
+          return 'Erro no servidor ao enviar mensagem. A mensagem pode ter sido enviada. Verifique o chat.';
+        }
         return 'Erro interno do servidor. Tente novamente mais tarde.';
       case 502:
         return 'Serviço temporariamente indisponível. Tente novamente.';
@@ -47,6 +51,11 @@ const translateError = (error) => {
       default:
         return data?.message || `Erro inesperado (${status}). Tente novamente.`;
     }
+  }
+
+  // Se não há response, pode ser um erro de rede ou timeout
+  if (error.message.includes('timeout')) {
+    return 'Tempo limite excedido. Verifique sua conexão e tente novamente.';
   }
 
   return error.message || 'Erro inesperado. Tente novamente.';

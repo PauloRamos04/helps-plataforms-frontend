@@ -13,13 +13,14 @@ import AuthContext from '../context/AuthContext';
 import { metricsService } from '../services/metricsService';
 import PageHeader from '../components/common/PageHeader';
 import ErrorHandler from '../components/common/ErrorHandler';
+import { createValidDate } from '../utils/dateUtils';
 
 function Metrics() {
   const { auth } = useContext(AuthContext);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [period, setPeriod] = useState('month');
+  const [period, setPeriod] = useState('all');
   const [metrics, setMetrics] = useState({
     total: 0,
     byStatus: {},
@@ -49,8 +50,8 @@ function Metrics() {
       
       const response = await metricsService.getDashboardMetrics();
       const ticketsData = response.success ? response.data : response;
-      
       const ticketsArray = Array.isArray(ticketsData) ? ticketsData : [];
+      
       setTickets(ticketsArray);
       calculateMetrics(ticketsArray);
     } catch (error) {
@@ -68,123 +69,155 @@ function Metrics() {
     const now = new Date();
     const cutoffDate = new Date();
 
-    switch (period) {
-      case 'week':
-        cutoffDate.setDate(now.getDate() - 7);
-        break;
-      case 'month':
-        cutoffDate.setMonth(now.getMonth() - 1);
-        break;
-      case 'quarter':
-        cutoffDate.setMonth(now.getMonth() - 3);
-        break;
-      case 'year':
-        cutoffDate.setFullYear(now.getFullYear() - 1);
-        break;
-      default:
-        return tickets;
-    }
+         switch (period) {
+       case 'all':
+         return tickets;
+       case 'week':
+         cutoffDate.setDate(now.getDate() - 7);
+         break;
+       case 'month':
+         cutoffDate.setMonth(now.getMonth() - 1);
+         break;
+       case 'quarter':
+         cutoffDate.setMonth(now.getMonth() - 3);
+         break;
+       case 'year':
+         cutoffDate.setFullYear(now.getFullYear() - 1);
+         break;
+       default:
+         return tickets;
+     }
 
-    return tickets.filter(ticket => {
-      const ticketDate = new Date(ticket.openingDate || ticket.dataAbertura);
-      return ticketDate >= cutoffDate;
-    });
+     const filteredTickets = tickets.filter(ticket => {
+       try {
+         const ticketDate = createValidDate(ticket.openingDate || ticket.dataAbertura);
+         
+         if (!ticketDate || isNaN(ticketDate.getTime())) {
+           return false;
+         }
+         
+         return ticketDate >= cutoffDate;
+       } catch (error) {
+         return false;
+       }
+     });
+
+     return filteredTickets;
   };
 
-  const calculateMetrics = (allTickets) => {
-    if (!Array.isArray(allTickets)) {
-      setMetrics({
-        total: 0,
-        byStatus: {},
-        byCategory: {},
-        averageResolutionTime: 0,
-        totalResolved: 0,
-        resolutionRate: 0,
-        myTickets: 0,
-        myResolved: 0,
-        myCreated: 0,
-        myInProgress: 0,
-        myAverageTime: 0
-      });
-      return;
-    }
+     const calculateMetrics = (allTickets) => {
+     if (!Array.isArray(allTickets)) {
+       setMetrics({
+         total: 0,
+         byStatus: {},
+         byCategory: {},
+         averageResolutionTime: 0,
+         totalResolved: 0,
+         resolutionRate: 0,
+         myTickets: 0,
+         myResolved: 0,
+         myCreated: 0,
+         myInProgress: 0,
+         myAverageTime: 0
+       });
+       return;
+     }
 
-    const filteredTickets = filterByPeriod(allTickets);
-    
-    const byStatus = filteredTickets.reduce((acc, ticket) => {
-      const status = ticket.status || 'ABERTO';
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
+     const filteredTickets = filterByPeriod(allTickets);
+     
+     const byStatus = filteredTickets.reduce((acc, ticket) => {
+       const status = ticket.status || 'ABERTO';
+       acc[status] = (acc[status] || 0) + 1;
+       return acc;
+     }, {});
 
-    const byCategory = filteredTickets.reduce((acc, ticket) => {
-      const category = ticket.category || ticket.categoria || 'GERAL';
-      acc[category] = (acc[category] || 0) + 1;
-      return acc;
-    }, {});
+     const byCategory = filteredTickets.reduce((acc, ticket) => {
+       const category = ticket.category || ticket.categoria || 'GERAL';
+       acc[category] = (acc[category] || 0) + 1;
+       return acc;
+     }, {});
 
-    const resolvedTickets = filteredTickets.filter(t => t.status === 'FECHADO');
+     const resolvedTickets = filteredTickets.filter(t => t.status === 'FECHADO');
     
     const resolutionTimes = resolvedTickets
       .filter(t => t.openingDate && t.closingDate)
       .map(t => {
-        const start = new Date(t.openingDate);
-        const end = new Date(t.closingDate);
+        const start = createValidDate(t.openingDate);
+        const end = createValidDate(t.closingDate);
+        if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+          return null;
+        }
         return (end - start) / (1000 * 60 * 60);
-      });
+      })
+      .filter(time => time !== null);
 
     const averageResolutionTime = resolutionTimes.length > 0
       ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
       : 0;
 
-    let myTickets, myResolved, myCreated, myInProgress, myAverageTime;
+               let myTickets, myResolved, myCreated, myInProgress, myAverageTime;
 
-    if (isUser) {
-      myTickets = filteredTickets.filter(t => 
-        (t.user?.id || t.usuario?.id) === auth.user?.id
-      );
-      myCreated = myTickets.length;
-      myResolved = myTickets.filter(t => t.status === 'FECHADO').length;
-      myInProgress = myTickets.filter(t => t.status === 'EM_ATENDIMENTO').length;
-      myAverageTime = 0;
-    } else if (isHelper) {
-      myTickets = filteredTickets.filter(t => t.helper?.id === auth.user?.id);
-      myResolved = myTickets.filter(t => t.status === 'FECHADO').length;
-      myInProgress = myTickets.filter(t => t.status === 'EM_ATENDIMENTO').length;
-      myCreated = 0;
+      if (isUser) {
+        // Para usuários, mostrar apenas os tickets que eles criaram
+        myTickets = filteredTickets.filter(t => {
+          const ticketUserId = t.user?.id;
+          const isMyTicket = ticketUserId === auth.user?.id;
+          return isMyTicket;
+        });
+        myCreated = myTickets.length;
+        myResolved = myTickets.filter(t => t.status === 'FECHADO').length;
+        myInProgress = myTickets.filter(t => t.status === 'EM_ATENDIMENTO').length;
+        myAverageTime = 0;
+      } else if (isHelper) {
+        // Para helpers, mostrar apenas os tickets que eles estão atendendo
+        myTickets = filteredTickets.filter(t => {
+          const ticketHelperId = t.helper?.id;
+          const isMyTicket = ticketHelperId === auth.user?.id;
+          return isMyTicket;
+        });
+        myResolved = myTickets.filter(t => t.status === 'FECHADO').length;
+        myInProgress = myTickets.filter(t => t.status === 'EM_ATENDIMENTO').length;
+        myCreated = 0;
       
       const helperResolutionTimes = myTickets
         .filter(t => t.status === 'FECHADO' && t.openingDate && t.closingDate)
         .map(t => {
-          const start = new Date(t.openingDate);
-          const end = new Date(t.closingDate);
+          const start = createValidDate(t.openingDate);
+          const end = createValidDate(t.closingDate);
+          if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+            return null;
+          }
           return (end - start) / (1000 * 60 * 60);
-        });
+        })
+        .filter(time => time !== null);
       
       myAverageTime = helperResolutionTimes.length > 0
         ? helperResolutionTimes.reduce((a, b) => a + b, 0) / helperResolutionTimes.length
         : 0;
-    } else {
-      myTickets = filteredTickets;
-      myResolved = resolvedTickets.length;
-      myInProgress = filteredTickets.filter(t => t.status === 'EM_ATENDIMENTO').length;
-      myCreated = filteredTickets.length;
-      myAverageTime = averageResolutionTime;
-    }
+              } else {
+       // Para admin, mostrar todos os tickets (visão global)
+       myTickets = filteredTickets;
+       myResolved = resolvedTickets.length;
+       myInProgress = filteredTickets.filter(t => t.status === 'EM_ATENDIMENTO').length;
+       myCreated = filteredTickets.length;
+       myAverageTime = averageResolutionTime;
+     }
 
-    setMetrics({
-      total: filteredTickets.length,
-      byStatus,
-      byCategory,
-      averageResolutionTime,
-      totalResolved: resolvedTickets.length,
-      resolutionRate: filteredTickets.length > 0 ? (resolvedTickets.length / filteredTickets.length) * 100 : 0,
-      myTickets: Array.isArray(myTickets) ? myTickets.length : 0,
-      myResolved,
-      myCreated,
-      myInProgress,
-      myAverageTime
-    });
+     const finalMetrics = {
+       total: filteredTickets.length,
+       byStatus,
+       byCategory,
+       averageResolutionTime,
+       totalResolved: resolvedTickets.length,
+       resolutionRate: filteredTickets.length > 0 ? (resolvedTickets.length / filteredTickets.length) * 100 : 0,
+       myTickets: Array.isArray(myTickets) ? myTickets.length : 0,
+       myResolved,
+       myCreated,
+       myInProgress,
+       myAverageTime
+     };
+     
+     setMetrics(finalMetrics);
   };
 
   const getStatusColor = (status) => {
@@ -773,6 +806,7 @@ function Metrics() {
             label="Período"
             onChange={(e) => setPeriod(e.target.value)}
           >
+            <MenuItem value="all">Todos</MenuItem>
             <MenuItem value="week">Última Semana</MenuItem>
             <MenuItem value="month">Último Mês</MenuItem>
             <MenuItem value="quarter">Último Trimestre</MenuItem>

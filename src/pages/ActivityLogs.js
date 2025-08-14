@@ -192,40 +192,60 @@ function ActivityLogs() {
   const formatDateTime = (dateString) => {
     if (!dateString) return '-';
     
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMinutes = Math.floor((now - date) / (1000 * 60));
-    
-    const formatted = date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/Sao_Paulo'
-    });
-    
-    if (diffMinutes < 60) {
-      return `${formatted} (${diffMinutes}min atrás)`;
-    } else if (diffMinutes < 1440) {
-      const hours = Math.floor(diffMinutes / 60);
-      return `${formatted} (${hours}h atrás)`;
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+
+        return '-';
+      }
+      
+      const now = new Date();
+      const diffMinutes = Math.floor((now - date) / (1000 * 60));
+      
+      const formatted = date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo'
+      });
+      
+      if (diffMinutes < 60) {
+        return `${formatted} (${diffMinutes}min atrás)`;
+      } else if (diffMinutes < 1440) {
+        const hours = Math.floor(diffMinutes / 60);
+        return `${formatted} (${hours}h atrás)`;
+      }
+      
+      return formatted;
+    } catch (error) {
+      
+      return '-';
     }
-    
-    return formatted;
   };
 
   const formatRelativeTime = (dateString) => {
     if (!dateString) return '-';
     
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMinutes = Math.floor((now - date) / (1000 * 60));
-    
-    if (diffMinutes < 1) return 'agora';
-    if (diffMinutes < 60) return `${diffMinutes}min atrás`;
-    if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h atrás`;
-    return `${Math.floor(diffMinutes / 1440)}d atrás`;
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+
+        return '-';
+      }
+      
+      const now = new Date();
+      const diffMinutes = Math.floor((now - date) / (1000 * 60));
+      
+      if (diffMinutes < 1) return 'agora';
+      if (diffMinutes < 60) return `${diffMinutes}min atrás`;
+      if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h atrás`;
+      return `${Math.floor(diffMinutes / 1440)}d atrás`;
+    } catch (error) {
+      
+      return '-';
+    }
   };
 
   const getSessionStatusChip = (session) => {

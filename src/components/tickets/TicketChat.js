@@ -1,17 +1,19 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import CloseIcon from '@mui/icons-material/Close';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import SendIcon from '@mui/icons-material/Send';
 import {
   Box, Typography, TextField, Button, Avatar,
   CircularProgress, IconButton, Tooltip, Snackbar, Alert
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import AttachFileIcon from '@mui/icons-material/AttachFile';
-import CloseIcon from '@mui/icons-material/Close';
-import AuthContext from '../../context/AuthContext';
-import ticketService from '../../services/ticketService';
-import notificationWebSocketService from '../../services/notificationWebSocketService';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 
-const TicketChat = ({ ticketId, ticketStatus }) => {
+import AuthContext from '../../context/AuthContext';
+import notificationWebSocketService from '../../services/notificationWebSocketService';
+import ticketService from '../../services/ticketService';
+import { formatTime, toISOString, isValidDate } from '../../utils/dateUtils';
+
+const TicketChat = ({ ticketId, ticketStatus, onTicketStatusChange }) => {
   const { auth } = useContext(AuthContext);
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
@@ -26,6 +28,8 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   const messageInputRef = useRef(null);
   const lastMessageCountRef = useRef(0);
   const wsConnectedRef = useRef(false);
+  const [wsStatus, setWsStatus] = useState('disconnected'); // 'connected', 'disconnected', 'connecting'
+  const [currentTicketStatus, setCurrentTicketStatus] = useState(ticketStatus);
   
   const focusInput = () => {
     setTimeout(() => {
@@ -73,70 +77,288 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     return false;
   };
 
-  const handleNewWebSocketMessage = (wsMessage) => {
+    const handleNewWebSocketMessage = (wsMessage) => {
+    // Processar atualizações de status do ticket
+    if (wsMessage.type === 'STATUS' && wsMessage.ticketId === parseInt(ticketId)) {
+      const newStatus = wsMessage.status || wsMessage.newStatus;
+      if (newStatus && newStatus !== currentTicketStatus) {
+        setCurrentTicketStatus(newStatus);
+        
+        // Notificar componente pai sobre mudança de status
+        if (onTicketStatusChange) {
+          onTicketStatusChange(newStatus);
+        }
+        
+        // Mostrar notificação se o ticket foi finalizado
+        if (newStatus === 'FECHADO') {
+          setNotification({
+            open: true,
+            message: 'Este chamado foi finalizado. Não é mais possível enviar mensagens.',
+            type: 'warning'
+          });
+        }
+      }
+      return;
+    }
+    
+    // Processar mensagens de chat
     if (wsMessage.type === 'CHAT' && wsMessage.ticketId === parseInt(ticketId)) {
       const currentUser = getCurrentUserIdentifier();
       
+      // Não processar mensagens próprias via WebSocket (já foram adicionadas otimisticamente)
       if (wsMessage.senderId?.toString() === currentUser?.userId?.toString()) {
         return;
       }
 
+      // Tratar timestamp corretamente usando a função utilitária
+      let sentDate = wsMessage.timestamp || wsMessage.sentDate;
+      sentDate = toISOString(sentDate);
+
       const newMessage = {
-        id: Date.now() + Math.random(),
+        id: wsMessage.id || Date.now() + Math.random(),
         isOwnMessage: false,
         senderId: wsMessage.senderId,
-        senderName: wsMessage.senderName,
-        senderUsername: wsMessage.senderName,
+        senderName: wsMessage.senderName || wsMessage.sender?.name,
+        senderUsername: wsMessage.senderUsername || wsMessage.sender?.username,
         sender: {
           id: wsMessage.senderId,
-          username: wsMessage.senderName,
-          name: wsMessage.senderName
+          username: wsMessage.senderUsername || wsMessage.sender?.username,
+          name: wsMessage.senderName || wsMessage.sender?.name
         },
         content: wsMessage.content,
-        sentDate: wsMessage.timestamp || new Date().toISOString(),
+        sentDate: sentDate,
         _isWebSocket: true
       };
 
       setMessages(prev => {
+        // Verificar se a mensagem já existe (evitar duplicatas)
         const exists = prev.some(m => 
-          m.content === newMessage.content && 
-          m.senderId === newMessage.senderId &&
-          Math.abs(new Date(m.sentDate) - new Date(newMessage.sentDate)) < 5000
+          (m.id && m.id === newMessage.id) ||
+          (m.content === newMessage.content && 
+           m.senderId === newMessage.senderId &&
+           Math.abs(new Date(m.sentDate) - new Date(newMessage.sentDate)) < 5000)
         );
         
-        if (exists) return prev;
+        if (exists) {
+          return prev;
+        }
         
         return [...prev, newMessage];
       });
     }
   };
 
-  const setupWebSocket = () => {
-    if (!ticketId || wsConnectedRef.current) return;
+  // Atualizar status do ticket quando mudar
+  useEffect(() => {
+    setCurrentTicketStatus(ticketStatus);
+  }, [ticketStatus]);
 
+  // Polling automático para sincronizar mensagens quando WebSocket não está funcionando
+  useEffect(() => {
+    if (!ticketId || wsStatus === 'connected') return;
+
+    const pollingInterval = setInterval(() => {
+      fetchMessages(true);
+    }, 10000); // Polling a cada 10 segundos
+
+    return () => clearInterval(pollingInterval);
+  }, [ticketId, wsStatus]);
+
+  const handleManualRefresh = async () => {
+    try {
+      await fetchMessages(false);
+      
+      // Tentar reconectar o WebSocket se estiver desconectado
+      if (wsStatus === 'disconnected') {
+        wsConnectedRef.current = false;
+        setTimeout(() => {
+          setupWebSocket();
+        }, 1000);
+      }
+      
+      setNotification({
+        open: true,
+        message: 'Mensagens atualizadas com sucesso!',
+        type: 'success'
+      });
+    } catch (error) {
+      setNotification({
+        open: true,
+        message: 'Erro ao atualizar mensagens. Tente novamente.',
+        type: 'error'
+      });
+    }
+  };
+
+  const handleReconnectWebSocket = () => {
+    // Desconectar se estiver conectado
+    if (wsConnectedRef.current) {
+      notificationWebSocketService.unsubscribe(`/topic/ticket/${ticketId}`);
+      wsConnectedRef.current = false;
+    }
+    
+    // Resetar estado
+    setWsStatus('disconnected');
+    
+    // Aguardar um pouco antes de tentar reconectar
+    setTimeout(() => {
+      setupWebSocket();
+    }, 2000);
+  };
+
+  const setupWebSocket = () => {
+    if (!ticketId) return;
+    
+    // Verificar estado atual do WebSocket service
+    const connectionState = notificationWebSocketService.getConnectionState();
+    
+    // Se já está conectado, apenas inscrever no tópico
+    if (connectionState.isConnected) {
+      wsConnectedRef.current = true;
+      setWsStatus('connected');
+      
+      const success = notificationWebSocketService.subscribe(
+        `/topic/ticket/${ticketId}`, 
+        handleNewWebSocketMessage
+      );
+      
+      if (!success) {
+        // Falha ao inscrever no WebSocket
+      }
+      return;
+    }
+    
+    // Se já está conectado localmente, não tentar conectar novamente
+    if (wsConnectedRef.current) {
+      return;
+    }
+
+    // Se está tentando conectar, não tentar novamente
+    if (wsStatus === 'connecting') {
+      return;
+    }
+
+    setWsStatus('connecting');
+    
     notificationWebSocketService.connect(
       () => {
         wsConnectedRef.current = true;
+        setWsStatus('connected');
         
         const success = notificationWebSocketService.subscribe(
           `/topic/ticket/${ticketId}`, 
           handleNewWebSocketMessage
         );
         
-        if (success) {
-          console.log(`WebSocket conectado ao chat do ticket ${ticketId}`);
+        if (!success) {
+          // Falha ao inscrever no WebSocket
         }
       },
       (error) => {
-        console.error('Erro WebSocket no chat:', error);
         wsConnectedRef.current = false;
+        setWsStatus('disconnected');
+        
+        // Não tentar reconectar automaticamente - deixar o usuário usar o botão de refresh
+        setNotification({
+          open: true,
+          message: 'Conexão perdida. Use o botão de atualizar para ver novas mensagens.',
+          type: 'warning'
+        });
       }
     );
   };
 
+  // Verificar estado do WebSocket periodicamente para sincronizar
+  useEffect(() => {
+    if (!ticketId) return;
+
+    let connectingTimeout = null;
+
+    const checkWebSocketStatus = () => {
+      const connectionState = notificationWebSocketService.getConnectionState();
+      
+      // Se o WebSocket está conectado mas o estado local não reflete isso
+      if (connectionState.isConnected && wsStatus !== 'connected') {
+        wsConnectedRef.current = true;
+        setWsStatus('connected');
+        
+        // Limpar timeout de connecting se existir
+        if (connectingTimeout) {
+          clearTimeout(connectingTimeout);
+          connectingTimeout = null;
+        }
+        
+        // Tentar inscrever no tópico se ainda não estiver inscrito
+        const success = notificationWebSocketService.subscribe(
+          `/topic/ticket/${ticketId}`, 
+          handleNewWebSocketMessage
+        );
+      } 
+      // Se o WebSocket não está conectado mas o estado local indica que está
+      else if (!connectionState.isConnected && wsStatus === 'connected') {
+        wsConnectedRef.current = false;
+        setWsStatus('disconnected');
+      }
+      // Se está tentando conectar há muito tempo, verificar se realmente está conectado
+      else if (wsStatus === 'connecting') {
+        if (connectionState.isConnected) {
+          wsConnectedRef.current = true;
+          setWsStatus('connected');
+          
+          // Limpar timeout de connecting
+          if (connectingTimeout) {
+            clearTimeout(connectingTimeout);
+            connectingTimeout = null;
+          }
+        }
+      }
+    };
+
+    // Verificar imediatamente
+    checkWebSocketStatus();
+
+    // Se estiver conectando, definir timeout para resetar após 20 segundos
+    if (wsStatus === 'connecting') {
+      connectingTimeout = setTimeout(() => {
+        setWsStatus('disconnected');
+        wsConnectedRef.current = false;
+      }, 20000);
+    }
+
+    // Verificar a cada 2 segundos
+    const statusInterval = setInterval(checkWebSocketStatus, 2000);
+
+    return () => {
+      clearInterval(statusInterval);
+      if (connectingTimeout) {
+        clearTimeout(connectingTimeout);
+      }
+    };
+  }, [ticketId, wsStatus]);
+
   useEffect(() => {
     if (!ticketId) return;
     
+    // Limpar estado anterior
+    setMessages([]);
+    setError(null);
+    setIsLoading(true);
+    
+    // Desconectar WebSocket anterior se existir
+    if (wsConnectedRef.current) {
+      notificationWebSocketService.unsubscribe(`/topic/ticket/${ticketId}`);
+      wsConnectedRef.current = false;
+      setWsStatus('disconnected');
+    }
+    
+    // Verificar se o WebSocket já está conectado
+    const connectionState = notificationWebSocketService.getConnectionState();
+    if (connectionState.isConnected) {
+      wsConnectedRef.current = true;
+      setWsStatus('connected');
+    }
+    
+    // Carregar mensagens e configurar WebSocket
     fetchMessages();
     setupWebSocket();
     focusInput();
@@ -145,6 +367,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       if (wsConnectedRef.current) {
         notificationWebSocketService.unsubscribe(`/topic/ticket/${ticketId}`);
         wsConnectedRef.current = false;
+        setWsStatus('disconnected');
       }
     };
   }, [ticketId]);
@@ -155,6 +378,8 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       lastMessageCountRef.current = messages.length;
     }
   }, [messages]);
+
+  // Remover o useEffect que notifica sobre WebSocket offline - já está sendo tratado no setupWebSocket
 
   const fetchMessages = async (silent = false) => {
     if (!ticketId) return;
@@ -170,11 +395,17 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
         const processedMessages = data.map(msg => {
           const isOwn = isMyMessage(msg);
           
+          // Tratar timestamp corretamente usando a função utilitária
+          let sentDate = msg.sentDate || msg.dataEnvio;
+          if (sentDate) {
+            sentDate = toISOString(sentDate);
+          }
+          
           return {
             ...msg,
             isOwnMessage: isOwn,
             content: msg.content || msg.conteudo || '',
-            sentDate: msg.sentDate || msg.dataEnvio,
+            sentDate: sentDate,
             senderId: msg.senderId || msg.sender?.id || msg.remetente?.id,
             senderName: msg.senderName || msg.sender?.name || msg.remetente?.name || msg.sender?.username || msg.remetente?.username || 'Usuário',
             senderUsername: msg.sender?.username || msg.remetente?.username
@@ -187,12 +418,11 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       if (error) {
         setError(null);
       }
-    } catch (err) {
-      console.error("Erro ao buscar mensagens:", err);
-      if (!silent) {
-        setError('Não foi possível carregar as mensagens. Tente novamente.');
-      }
-    } finally {
+         } catch (err) {
+       if (!silent) {
+         setError('Não foi possível carregar as mensagens. Tente novamente.');
+       }
+     } finally {
       if (!silent) {
         setIsLoading(false);
       }
@@ -202,12 +432,23 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
   const handleSendMessage = async () => {
     if ((!messageInput.trim() && !selectedImage) || isSending) return;
     
+    // Verificar se o ticket está finalizado
+    if (currentTicketStatus === 'FECHADO') {
+      setNotification({
+        open: true,
+        message: 'Este chamado foi finalizado. Não é mais possível enviar mensagens.',
+        type: 'error'
+      });
+      return;
+    }
+    
     setIsSending(true);
     const currentMessage = messageInput;
     setMessageInput('');
     
     const currentUser = getCurrentUserIdentifier();
     
+    // Mensagem otimista
     const optimisticId = `temp-${Date.now()}`;
     const optimisticMessage = {
       id: optimisticId,
@@ -226,11 +467,8 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
         name: currentUser?.name
       },
       content: currentMessage,
-      conteudo: currentMessage,
       sentDate: new Date().toISOString(),
-      dataEnvio: new Date().toISOString(),
-      _isOptimistic: true,
-      imagePath: selectedImage ? 'pending' : null
+      _isOptimistic: true
     };
     
     setMessages(prev => [...prev, optimisticMessage]);
@@ -249,11 +487,16 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
         });
       }
       
+      // Verificar se a resposta é válida
+      if (!response) {
+        throw new Error('Resposta inválida do servidor');
+      }
+      
       const processedResponse = {
         ...response,
         isOwnMessage: true,
         content: response.content || response.conteudo || currentMessage,
-        sentDate: response.sentDate || response.dataEnvio || new Date().toISOString(),
+        sentDate: toISOString(response.sentDate || response.dataEnvio),
         senderId: currentUser?.userId,
         senderName: currentUser?.name || currentUser?.username,
         senderUsername: currentUser?.username,
@@ -269,6 +512,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
         }
       };
       
+      // Substituir mensagem otimista pela real
       setMessages(prev => 
         prev.filter(m => m.id !== optimisticId).concat([processedResponse])
       );
@@ -276,14 +520,31 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       setSelectedImage(null);
       setImagePreview(null);
       
-    } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
-      setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
-      setMessageInput(currentMessage);
+      // Mostrar sucesso
+      setNotification({
+        open: true,
+        message: 'Mensagem enviada com sucesso!',
+        type: 'success'
+      });
+      
+         } catch (error) {
+       // Remover mensagem otimista em caso de erro
+       setMessages(prev => prev.filter(msg => msg.id !== optimisticId));
+       setMessageInput(currentMessage);
+      
+      // Mostrar erro mais específico
+      let errorMessage = 'Não foi possível enviar a mensagem. Tente novamente.';
+      if (error.message.includes('Erro interno do servidor')) {
+        errorMessage = 'Erro no servidor. A mensagem pode ter sido enviada. Verifique se apareceu no chat.';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Tempo limite excedido. Verifique sua conexão e tente novamente.';
+      } else if (error.response?.status === 400) {
+        errorMessage = 'Este chamado foi finalizado. Não é mais possível enviar mensagens.';
+      }
       
       setNotification({
         open: true,
-        message: 'Não foi possível enviar a mensagem. Tente novamente.',
+        message: errorMessage,
         type: 'error'
       });
     } finally {
@@ -345,11 +606,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     setNotification(prev => ({ ...prev, open: false }));
   };
 
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  };
+
 
   const getInitial = (name) => {
     return name?.charAt(0)?.toUpperCase() || 'U';
@@ -367,7 +624,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
     return null;
   };
 
-  const isChatDisabled = ticketStatus !== 'EM_ATENDIMENTO' && ticketStatus !== 'IN_PROGRESS';
+  const isChatDisabled = currentTicketStatus !== 'EM_ATENDIMENTO' && currentTicketStatus !== 'IN_PROGRESS';
 
   return (
     <Box
@@ -393,21 +650,60 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
       >
         <Typography variant="subtitle1" fontWeight="medium">
           Chat do Chamado #{ticketId}
-          {wsConnectedRef.current && (
-            <Box component="span" sx={{ ml: 1, color: '#4caf50', fontSize: '0.8rem' }}>
-              ● Online
+          <Box component="span" sx={{ ml: 1, fontSize: '0.8rem' }}>
+            {wsStatus === 'connected' && (
+              <Box component="span" sx={{ color: '#4caf50' }}>
+                ● Online
+              </Box>
+            )}
+            {wsStatus === 'connecting' && (
+              <Box component="span" sx={{ color: '#ff9800' }}>
+                ● Conectando...
+              </Box>
+            )}
+            {wsStatus === 'disconnected' && (
+              <Box component="span" sx={{ color: '#f44336' }}>
+                ● Offline
+              </Box>
+            )}
+          </Box>
+          {currentTicketStatus === 'FECHADO' && (
+            <Box 
+              component="span" 
+              sx={{ 
+                ml: 1, 
+                fontSize: '0.8rem',
+                color: '#f44336',
+                fontWeight: 'bold'
+              }}
+            >
+              ● FINALIZADO
             </Box>
           )}
         </Typography>
         
-        <Tooltip title="Atualizar mensagens">
-          <IconButton 
-            size="small" 
-            onClick={() => fetchMessages()}
-          >
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {wsStatus === 'disconnected' && (
+            <Tooltip title="Reconectar WebSocket">
+              <IconButton 
+                size="small" 
+                onClick={handleReconnectWebSocket}
+                sx={{ color: '#f44336' }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title="Atualizar mensagens">
+            <IconButton 
+              size="small" 
+              onClick={handleManualRefresh}
+              disabled={isLoading}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
       
       {error && (
@@ -576,7 +872,7 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
                           mt: 0.5
                         }}
                       >
-                        {formatTime(sentDate)}
+                        {sentDate ? formatTime(sentDate) : ''}
                         {message._isOptimistic && ' (enviando...)'}
                       </Typography>
                     </Box>
@@ -674,9 +970,13 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
             fullWidth
             multiline
             maxRows={3}
-            placeholder={isChatDisabled
-              ? "Chat disponível apenas para chamados em atendimento"
-              : "Digite sua mensagem..."}
+            placeholder={
+              currentTicketStatus === 'FECHADO'
+                ? "Este chamado foi finalizado"
+                : isChatDisabled
+                ? "Chat disponível apenas para chamados em atendimento"
+                : "Digite sua mensagem..."
+            }
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}
@@ -717,7 +1017,10 @@ const TicketChat = ({ ticketId, ticketStatus }) => {
               mt: 1
             }}
           >
-            O chat só está disponível para chamados em atendimento
+            {currentTicketStatus === 'FECHADO'
+              ? 'Este chamado foi finalizado e não pode mais receber mensagens'
+              : 'O chat só está disponível para chamados em atendimento'
+            }
           </Typography>
         )}
       </Box>
