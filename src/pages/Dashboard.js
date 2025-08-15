@@ -122,7 +122,7 @@ function Dashboard() {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <PageHeader 
+      {/* <PageHeader 
         title="Dashboard"
         actionButton={
           <Button
@@ -139,7 +139,7 @@ function Dashboard() {
             Novo Chamado
           </Button>
         }
-      />
+      /> */}
       
       {error && <ErrorHandler message={error} onRetry={fetchTickets} />}
       
@@ -150,7 +150,7 @@ function Dashboard() {
       ) : (
         <>
           {/* Cards de Estatísticas */}
-          <Grid container spacing={3} sx={{ mb: 3 }}>
+          {/* <Grid container spacing={3} sx={{ mb: 3 }}>
             <Grid item xs={12} sm={6} md={3}>
               <Card sx={{ 
                 bgcolor: '#e3f2fd', 
@@ -200,7 +200,7 @@ function Dashboard() {
                   </Typography>
                 </CardContent>
               </Card>
-            </Grid>
+            </Grid> 
             
             <Grid item xs={12} sm={6} md={3}>
               <Card sx={{ 
@@ -218,12 +218,113 @@ function Dashboard() {
                 </CardContent>
               </Card>
             </Grid>
-          </Grid>
+          </Grid>*/}
 
           {/* Cards de Conteúdo */}
           <Grid container spacing={3}>
-            {/* Últimos Chamados */}
-            <Grid item xs={12} lg={8}>
+            {/* Primeira Linha: Bem-vindo e Ações Rápidas */}
+            <Grid item xs={12} md={6}>
+              <Card sx={{ height: 230, '&:hover': { boxShadow: 3 } }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#333', mb: 2 }}>
+                    Bem-vindo!
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        bgcolor: '#4966f2',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        mr: 2
+                      }}
+                    >
+                      {auth.user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                    </Box>
+                    <Box>
+                      <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                        {auth.user?.name || auth.user?.username || 'Usuário'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {isAdmin ? 'Administrador' : isHelper ? 'Helper' : 'Usuário'}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Você tem {stats.total} chamado{stats.total !== 1 ? 's' : ''} no sistema.
+                  </Typography>
+                  
+                  {stats.open > 0 && (
+                    <Typography variant="body2" color="warning.main" sx={{ fontWeight: 'medium' }}>
+                      ⚠️ {stats.open} chamado{stats.open !== 1 ? 's' : ''} aguardando atendimento
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Card sx={{ height: 230, '&:hover': { boxShadow: 3 } }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#333', mb: 2 }}>
+                    Ações Rápidas
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Button
+                      component={RouterLink}
+                      to="/tickets/new"
+                      variant="contained"
+                      fullWidth
+                      sx={{ 
+                        bgcolor: '#4966f2',
+                        '&:hover': { bgcolor: '#3f51b5' },
+                        textTransform: 'none',
+                        mb: 1
+                      }}
+                    >
+                      Novo Chamado
+                    </Button>
+                    <Button
+                      component={RouterLink}
+                      to="/tickets"
+                      variant="outlined"
+                      fullWidth
+                      sx={{ 
+                        borderColor: '#e0e0e0',
+                        color: '#666',
+                        textTransform: 'none',
+                        mb: 1
+                      }}
+                    >
+                      Ver Todos os Chamados
+                    </Button>
+                    <Button
+                      component={RouterLink}
+                      to="/metrics"
+                      variant="outlined"
+                      fullWidth
+                      sx={{ 
+                        borderColor: '#e0e0e0',
+                        color: '#666',
+                        textTransform: 'none'
+                      }}
+                    >
+                      Ver Métricas
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            {/* Segunda Linha: Últimos Chamados */}
+            <Grid item xs={12}>
               <Card sx={{ height: '100%', '&:hover': { boxShadow: 3 } }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -332,158 +433,65 @@ function Dashboard() {
               </Card>
             </Grid>
 
-            {/* Sidebar com Informações */}
-            <Grid item xs={12} lg={4}>
-              <Grid container spacing={2}>
-                {/* Ações Rápidas */}
-                <Grid item xs={12}>
-                  <Card sx={{ '&:hover': { boxShadow: 3 } }}>
-                    <CardContent>
-                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#333', mb: 2 }}>
-                        Ações Rápidas
+            {/* Chamados Disponíveis para Helpers - Terceira Linha */}
+            {isHelper && (
+              <Grid item xs={12}>
+                <Card sx={{ '&:hover': { boxShadow: 3 } }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#333', mb: 2 }}>
+                      Chamados Disponíveis
+                    </Typography>
+                    {tickets.filter(t => t.status === 'ABERTO').length > 0 ? (
+                      <List sx={{ p: 0 }}>
+                        {tickets
+                          .filter(t => t.status === 'ABERTO')
+                          .slice(0, 3)
+                          .map((ticket) => {
+                            const ticketData = getTicketData(ticket);
+                            return (
+                              <React.Fragment key={ticketData.id}>
+                                <ListItem 
+                                  button 
+                                  component={RouterLink} 
+                                  to={`/tickets/${ticketData.id}`}
+                                  sx={{ 
+                                    py: 1,
+                                    borderRadius: '4px',
+                                    mb: 0.5,
+                                    '&:hover': {
+                                      bgcolor: 'rgba(0, 0, 0, 0.04)',
+                                      transform: 'translateX(4px)',
+                                      transition: 'all 0.2s ease'
+                                    }
+                                  }}
+                                >
+                                  <ListItemText
+                                    primary={
+                                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                        {ticketData.title}
+                                      </Typography>
+                                    }
+                                    secondary={
+                                      <Typography variant="caption" color="text.secondary">
+                                        {formatDate(ticketData.openingDate)}
+                                      </Typography>
+                                    }
+                                  />
+                                </ListItem>
+                                <Divider />
+                              </React.Fragment>
+                            );
+                          })}
+                      </List>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                        Não há chamados abertos no momento.
                       </Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <Button
-                          component={RouterLink}
-                          to="/tickets/new"
-                          variant="contained"
-                          fullWidth
-                          sx={{ 
-                            bgcolor: '#4966f2',
-                            '&:hover': { bgcolor: '#3f51b5' },
-                            textTransform: 'none',
-                            mb: 1
-                          }}
-                        >
-                          Novo Chamado
-                        </Button>
-                        <Button
-                          component={RouterLink}
-                          to="/tickets"
-                          variant="outlined"
-                          fullWidth
-                          sx={{ 
-                            borderColor: '#e0e0e0',
-                            color: '#666',
-                            textTransform: 'none'
-                          }}
-                        >
-                          Ver Todos os Chamados
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                {/* Chamados Disponíveis para Helpers */}
-                {isHelper && (
-                  <Grid item xs={12}>
-                    <Card sx={{ '&:hover': { boxShadow: 3 } }}>
-                      <CardContent>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#333', mb: 2 }}>
-                          Chamados Disponíveis
-                        </Typography>
-                        {tickets.filter(t => t.status === 'ABERTO').length > 0 ? (
-                          <List sx={{ p: 0 }}>
-                            {tickets
-                              .filter(t => t.status === 'ABERTO')
-                              .slice(0, 3)
-                              .map((ticket) => {
-                                const ticketData = getTicketData(ticket);
-                                return (
-                                  <React.Fragment key={ticketData.id}>
-                                    <ListItem 
-                                      button 
-                                      component={RouterLink} 
-                                      to={`/tickets/${ticketData.id}`}
-                                      sx={{ 
-                                        py: 1,
-                                        borderRadius: '4px',
-                                        mb: 0.5,
-                                        '&:hover': {
-                                          bgcolor: 'rgba(0, 0, 0, 0.04)',
-                                          transform: 'translateX(4px)',
-                                          transition: 'all 0.2s ease'
-                                        }
-                                      }}
-                                    >
-                                      <ListItemText
-                                        primary={
-                                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                                            {ticketData.title}
-                                          </Typography>
-                                        }
-                                        secondary={
-                                          <Typography variant="caption" color="text.secondary">
-                                            {formatDate(ticketData.openingDate)}
-                                          </Typography>
-                                        }
-                                      />
-                                    </ListItem>
-                                    <Divider />
-                                  </React.Fragment>
-                                );
-                              })}
-                          </List>
-                        ) : (
-                          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                            Não há chamados abertos no momento.
-                          </Typography>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )}
-
-                {/* Informações do Usuário */}
-                <Grid item xs={12}>
-                  <Card sx={{ '&:hover': { boxShadow: 3 } }}>
-                    <CardContent>
-                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#333', mb: 2 }}>
-                        Bem-vindo!
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <Box
-                          sx={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: '50%',
-                            bgcolor: '#4966f2',
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '18px',
-                            fontWeight: 'bold',
-                            mr: 2
-                          }}
-                        >
-                          {auth.user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                        </Box>
-                        <Box>
-                          <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-                            {auth.user?.name || auth.user?.username || 'Usuário'}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {isAdmin ? 'Administrador' : isHelper ? 'Helper' : 'Usuário'}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Você tem {stats.total} chamado{stats.total !== 1 ? 's' : ''} no sistema.
-                      </Typography>
-                      
-                      {stats.open > 0 && (
-                        <Typography variant="body2" color="warning.main" sx={{ fontWeight: 'medium' }}>
-                          ⚠️ {stats.open} chamado{stats.open !== 1 ? 's' : ''} aguardando atendimento
-                        </Typography>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
+                    )}
+                  </CardContent>
+                </Card>
               </Grid>
-            </Grid>
+            )}
           </Grid>
         </>
       )}
