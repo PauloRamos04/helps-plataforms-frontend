@@ -1,16 +1,17 @@
-import React, { useState, useContext, useRef } from 'react';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import CloseIcon from '@mui/icons-material/Close';
 import {
   Box, Typography, TextField, Button, Paper,
   FormControl, InputLabel, Select, MenuItem,
   Alert, Snackbar, IconButton, CircularProgress
 } from '@mui/material';
+import React, { useState, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AttachFileIcon from '@mui/icons-material/AttachFile';
-import CloseIcon from '@mui/icons-material/Close';
+
+import PageHeader from '../components/common/PageHeader';
 import AuthContext from '../context/AuthContext';
 import NotificationsContext from '../context/NotificationsContext';
 import { ticketService } from '../services/ticketService';
-import PageHeader from '../components/common/PageHeader';
 import { validateRequired } from '../utils/validationUtils';
 
 function NewTicket() {
@@ -34,10 +35,25 @@ function NewTicket() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    
+    // Validação especial para o campo description
+    if (name === 'description') {
+      // Limita automaticamente a 1000 caracteres - SEMPRE
+      const truncatedValue = value.length > 1000 ? value.substring(0, 1000) : value;
+      
+      // Garantia adicional: se por algum motivo ainda exceder, força o limite
+      const finalValue = truncatedValue.length > 1000 ? truncatedValue.substring(0, 1000) : truncatedValue;
+      
+      setFormData(prev => ({
+        ...prev,
+        [name]: finalValue
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
     
     if (errors[name]) {
       setErrors(prev => ({
@@ -94,8 +110,18 @@ function NewTicket() {
     const descriptionError = validateRequired(formData.description, 'Descrição');
     if (descriptionError) newErrors.description = descriptionError;
     
-    if (formData.description && (formData.description.length < 10 || formData.description.length > 1000)) {
-      newErrors.description = "A descrição deve ter entre 10 e 1000 caracteres";
+    if (formData.description && formData.description.length < 10) {
+      newErrors.description = "A descrição deve ter pelo menos 10 caracteres";
+    }
+    
+    // Validação rigorosa para o limite de 1000 caracteres
+    if (formData.description && formData.description.length > 1000) {
+      newErrors.description = "A descrição não pode ter mais de 1000 caracteres";
+      // Força o truncamento se exceder
+      setFormData(prev => ({
+        ...prev,
+        description: formData.description.substring(0, 1000)
+      }));
     }
     
     const categoryError = validateRequired(formData.category, 'Categoria');
@@ -108,7 +134,19 @@ function NewTicket() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validação rigorosa ANTES de qualquer coisa
+    if (formData.description && formData.description.length > 1000) {
+      setError('A descrição não pode ter mais de 1000 caracteres. Reduza o texto e tente novamente.');
+      return;
+    }
+
     if (!validateForm()) {
+      return;
+    }
+
+    // Validação final antes do envio
+    if (formData.description.length > 1000) {
+      setError('Erro de validação: Descrição excede o limite permitido.');
       return;
     }
 
@@ -117,6 +155,12 @@ function NewTicket() {
 
     try {
       const formDataToSend = new FormData();
+      
+      // Validação final antes de adicionar ao FormData
+      if (formData.description.length > 1000) {
+        throw new Error('Descrição excede o limite de 1000 caracteres');
+      }
+      
       formDataToSend.append('title', formData.title);
       formDataToSend.append('description', formData.description);
       formDataToSend.append('category', formData.category);
@@ -250,9 +294,15 @@ function NewTicket() {
               value={formData.description}
               onChange={handleChange}
               required
-              inputProps={{ minLength: 10, maxLength: 1000 }}
-              helperText={errors.description || "A descrição deve ter entre 10-1000 caracteres"}
-              error={!!errors.description}
+              inputProps={{ 
+                minLength: 10,
+                'data-testid': 'description-field'
+              }}
+              helperText={
+                errors.description || 
+                `${formData.description.length}/1000 caracteres - A descrição deve ter entre 10-1000 caracteres`
+              }
+              error={!!errors.description || formData.description.length > 1000}
               variant="outlined"
               sx={{
                 '.MuiOutlinedInput-root': {
@@ -261,6 +311,37 @@ function NewTicket() {
                 }
               }}
             />
+
+            {/* Contador de caracteres */}
+            <Box sx={{ 
+              mt: 1, 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              px: 1
+            }}>
+              <Typography 
+                variant="caption" 
+                color={formData.description.length > 1000 ? 'error' : 'text.secondary'}
+                sx={{ fontSize: '0.75rem' }}
+              >
+                {formData.description.length > 1000 && (
+                  <span style={{ color: '#d32f2f', fontWeight: 'bold' }}>
+                    ⚠️ Limite de 1000 caracteres excedido! 
+                  </span>
+                )}
+              </Typography>
+              <Typography 
+                variant="caption" 
+                color={formData.description.length > 1000 ? 'error' : 'text.secondary'}
+                sx={{ 
+                  fontSize: '0.75rem',
+                  fontWeight: formData.description.length > 1000 ? 'bold' : 'normal'
+                }}
+              >
+                {formData.description.length}/1000
+              </Typography>
+            </Box>
 
             <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
               <input
