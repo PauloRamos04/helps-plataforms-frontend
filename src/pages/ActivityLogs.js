@@ -1,11 +1,3 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Box, Typography, Paper, Tabs, Tab, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip,
-  TextField, InputAdornment, Grid, Card, CardContent, Button,
-  CircularProgress, Alert, Pagination, Select, MenuItem, FormControl,
-  InputLabel
-} from '@mui/material';
 import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
@@ -20,9 +12,18 @@ import {
   Assignment as AssignmentIcon,
   Group as GroupIcon
 } from '@mui/icons-material';
-import activityLogService from '../services/activityLogService';
-import PageHeader from '../components/common/PageHeader';
+import {
+  Box, Typography, Paper, Tabs, Tab, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip,
+  TextField, InputAdornment, Grid, Card, CardContent, Button,
+  CircularProgress, Alert, Pagination, Select, MenuItem, FormControl,
+  InputLabel
+} from '@mui/material';
+import React, { useState, useEffect } from 'react';
+
 import ErrorHandler from '../components/common/ErrorHandler';
+import PageHeader from '../components/common/PageHeader';
+import activityLogService from '../services/activityLogService';
 
 const TabPanel = ({ children, value, index, ...other }) => (
   <div
@@ -190,17 +191,30 @@ function ActivityLogs() {
   };
 
   const formatDateTime = (dateString) => {
-    if (!dateString) return '-';
+    if (!dateString) return 'Data não disponível';
     
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-
-        return '-';
+      // Tentar diferentes formatos de data
+      let date;
+      
+      if (typeof dateString === 'string') {
+        // Se for string, tentar parsear
+        date = new Date(dateString);
+      } else if (dateString instanceof Date) {
+        // Se já for Date object
+        date = dateString;
+      } else if (Array.isArray(dateString)) {
+        // Se for array (formato Java LocalDateTime)
+        date = new Date(dateString[0], dateString[1] - 1, dateString[2], dateString[3], dateString[4], dateString[5]);
+      } else {
+        // Se for timestamp numérico
+        date = new Date(dateString);
       }
       
-      const now = new Date();
-      const diffMinutes = Math.floor((now - date) / (1000 * 60));
+      if (isNaN(date.getTime())) {
+        console.warn('Data inválida em formatDateTime:', dateString);
+        return 'Data inválida';
+      }
       
       const formatted = date.toLocaleString('pt-BR', {
         day: '2-digit',
@@ -211,28 +225,37 @@ function ActivityLogs() {
         timeZone: 'America/Sao_Paulo'
       });
       
-      if (diffMinutes < 60) {
-        return `${formatted} (${diffMinutes}min atrás)`;
-      } else if (diffMinutes < 1440) {
-        const hours = Math.floor(diffMinutes / 60);
-        return `${formatted} (${hours}h atrás)`;
-      }
-      
       return formatted;
     } catch (error) {
-      
-      return '-';
+      console.error('Erro ao formatar data em formatDateTime:', error, dateString);
+      return 'Erro na data';
     }
   };
 
   const formatRelativeTime = (dateString) => {
-    if (!dateString) return '-';
+    if (!dateString) return 'Data não disponível';
     
     try {
-      const date = new Date(dateString);
+      // Tentar diferentes formatos de data
+      let date;
+      
+      if (typeof dateString === 'string') {
+        // Se for string, tentar parsear
+        date = new Date(dateString);
+      } else if (dateString instanceof Date) {
+        // Se já for Date object
+        date = dateString;
+      } else if (Array.isArray(dateString)) {
+        // Se for array (formato Java LocalDateTime)
+        date = new Date(dateString[0], dateString[1] - 1, dateString[2], dateString[3], dateString[4], dateString[5]);
+      } else {
+        // Se for timestamp numérico
+        date = new Date(dateString);
+      }
+      
       if (isNaN(date.getTime())) {
-
-        return '-';
+        console.warn('Data inválida:', dateString);
+        return formatDateTime(dateString) || 'Data inválida';
       }
       
       const now = new Date();
@@ -243,8 +266,8 @@ function ActivityLogs() {
       if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h atrás`;
       return `${Math.floor(diffMinutes / 1440)}d atrás`;
     } catch (error) {
-      
-      return '-';
+      console.error('Erro ao formatar data:', error, dateString);
+      return formatDateTime(dateString) || 'Erro na data';
     }
   };
 
@@ -357,15 +380,14 @@ function ActivityLogs() {
               <>
                 <TableContainer>
                   <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Ação</TableCell>
-                        <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Usuário</TableCell>
-                        <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>IP</TableCell>
-                        <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Data/Hora</TableCell>
-                        <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Descrição</TableCell>
-                      </TableRow>
-                    </TableHead>
+                                         <TableHead>
+                       <TableRow>
+                         <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Ação</TableCell>
+                         <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Usuário</TableCell>
+                         <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Data/Hora</TableCell>
+                         <TableCell sx={{ fontWeight: 'medium', color: '#666' }}>Descrição</TableCell>
+                       </TableRow>
+                     </TableHead>
                     <TableBody>
                       {filteredLogs.map((log) => (
                         <TableRow key={log.id} hover>
@@ -392,18 +414,13 @@ function ActivityLogs() {
                               @{log.username}
                             </Typography>
                           </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                              {log.ipAddress || '-'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Tooltip title={formatDateTime(log.createdAt)}>
-                              <Typography variant="body2">
-                                {formatRelativeTime(log.createdAt)}
-                              </Typography>
-                            </Tooltip>
-                          </TableCell>
+                                                     <TableCell>
+                             <Tooltip title={formatDateTime(log.createdAt)}>
+                               <Typography variant="body2">
+                                 {formatRelativeTime(log.createdAt)}
+                               </Typography>
+                             </Tooltip>
+                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" sx={{ maxWidth: '300px' }}>
                               {log.additionalInfo || 'Nenhuma descrição adicional'}
