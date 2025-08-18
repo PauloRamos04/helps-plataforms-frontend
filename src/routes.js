@@ -13,6 +13,7 @@ const UserManagement = lazy(() => import('./pages/UserManagement'));
 const ActivityLogs = lazy(() => import('./pages/ActivityLogs'));
 const Audit = lazy(() => import('./pages/Audit'));
 const Metrics = lazy(() => import('./pages/Metrics'));
+const MemoryDebug = lazy(() => import('./pages/MemoryDebug'));
 
 const AppRoutes = () => {
   return (
@@ -77,6 +78,14 @@ const AppRoutes = () => {
             <PrivateRoute requiredRole="ADMIN">
               <Suspense fallback={<LoadingFallback />}>
                 <Audit />
+              </Suspense>
+            </PrivateRoute>
+          } />
+
+          <Route path="admin/debug" element={
+            <PrivateRoute requiredRole="ADMIN">
+              <Suspense fallback={<LoadingFallback />}>
+                <MemoryDebug />
               </Suspense>
             </PrivateRoute>
           } />

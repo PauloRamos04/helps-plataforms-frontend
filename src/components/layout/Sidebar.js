@@ -11,6 +11,7 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SearchIcon from '@mui/icons-material/Search';
+import BugReportIcon from '@mui/icons-material/BugReport';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AuthContext from '../../context/AuthContext';
 import alaresLogo from '../../assets/alares.png';
@@ -161,6 +162,14 @@ function Sidebar() {
               icon={<SearchIcon fontSize="small" />}
             >
               Auditoria
+            </MenuItem>
+
+            <MenuItem 
+              to="/admin/debug" 
+              active={pathname === '/admin/debug'}
+              icon={<BugReportIcon fontSize="small" />}
+            >
+              Debug de Memória
             </MenuItem>
           </>
         )}
